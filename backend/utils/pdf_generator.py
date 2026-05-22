@@ -139,60 +139,105 @@ def generate_barangay_id(resident_data: dict, id_data: dict, photo_bytes: bytes 
     buffer = io.BytesIO()
     id_width = 3.375 * inch
     id_height = 2.125 * inch
-    doc = SimpleDocTemplate(buffer, pagesize=(id_width * 2 + 0.5*inch, id_height + 0.5*inch),
-                            leftMargin=0.25*inch, rightMargin=0.25*inch,
-                            topMargin=0.25*inch, bottomMargin=0.25*inch)
+    # Use a larger page so two cards fit comfortably with margins
+    page_width = id_width * 2 + 0.75 * inch
+    page_height = id_height + 0.75 * inch
+    doc = SimpleDocTemplate(buffer, pagesize=(page_width, page_height),
+                            leftMargin=0.2*inch, rightMargin=0.2*inch,
+                            topMargin=0.2*inch, bottomMargin=0.2*inch)
     elements = []
-    styles = getSampleStyleSheet()
     bi = SYSTEM_CONFIG['barangay_info']
     id_number = id_data.get('id_number', 'N/A')
 
-    title_style = ParagraphStyle('IDTitle', fontSize=8, alignment=TA_CENTER, fontName='Helvetica-Bold', textColor=colors.white)
-    info_style = ParagraphStyle('IDInfo', fontSize=7, alignment=TA_LEFT)
+    title_style = ParagraphStyle('IDTitle', fontSize=7, alignment=TA_CENTER, fontName='Helvetica-Bold', textColor=colors.white)
+    info_style = ParagraphStyle('IDInfo', fontSize=6, alignment=TA_LEFT, leading=8)
+    name_style = ParagraphStyle('IDName', fontSize=8, alignment=TA_LEFT, fontName='Helvetica-Bold', leading=10)
 
     qr_data = f"BID|{id_number}|{resident_data.get('full_name')}|{bi['name']}"
     qr_bytes = generate_qr_code(qr_data)
-    qr_img = Image(io.BytesIO(qr_bytes), width=0.8*inch, height=0.8*inch)
+    qr_img = Image(io.BytesIO(qr_bytes), width=0.7*inch, height=0.7*inch)
 
-    photo_cell = Paragraph("<para align=center><b>PHOTO</b></para>", info_style)
+    photo_cell_content = Paragraph("<para align=center><b>PHOTO</b></para>", info_style)
     if photo_bytes:
         try:
-            photo_cell = Image(io.BytesIO(photo_bytes), width=0.9*inch, height=1.1*inch)
+            photo_cell_content = Image(io.BytesIO(photo_bytes), width=0.8*inch, height=1.0*inch)
         except Exception:
             pass
 
-    addr_truncated = (resident_data.get('address', '') or '')[:40]
+    addr_truncated = (resident_data.get('address', '') or '')[:35]
+
+    # Front card: header row + body row with photo + info
+    front_body = Table([
+        [photo_cell_content,
+         Paragraph(
+             f"<b>{resident_data.get('full_name', '').upper()}</b><br/>"
+             f"<font size=5>ID: {id_number}<br/>"
+             f"Age: {resident_data.get('age')} | {resident_data.get('gender')}<br/>"
+             f"Status: {resident_data.get('civil_status')}<br/>"
+             f"Addr: {addr_truncated}</font>",
+             name_style
+         )]
+    ], colWidths=[0.9*inch, 2.1*inch], rowHeights=[1.1*inch])
+    front_body.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+    ]))
+
     front_data = [
-        [Paragraph(f"<para align=center><b>BARANGAY {bi['name'].upper()}</b><br/>{bi['municipality']}, {bi['province']}</para>", title_style)],
-        [Table([
-            [photo_cell,
-             Paragraph(f"<b>{resident_data.get('full_name', '').upper()}</b><br/><font size=6>ID #: {id_number}<br/>Age: {resident_data.get('age')}<br/>Gender: {resident_data.get('gender')}<br/>Civil Status: {resident_data.get('civil_status')}<br/>Address: {addr_truncated}</font>", info_style)],
-        ], colWidths=[1.1*inch, 2.0*inch])]
+        [Paragraph(f"<para align=center><b>BARANGAY {bi['name'].upper()}</b><br/>"
+                   f"<font size=6>{bi['municipality']}, {bi['province']}</font></para>", title_style)],
+        [front_body]
     ]
-    front_table = Table(front_data, colWidths=[id_width - 0.2*inch], rowHeights=[0.35*inch, 1.6*inch])
+    front_table = Table(front_data, colWidths=[id_width - 0.1*inch], rowHeights=[0.4*inch, 1.2*inch])
     front_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d6a4f')),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+        ('VALIGN', (0, 1), (-1, 1), 'TOP'),
         ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d6a4f')),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, 0), 4),
+    ]))
+
+    # Back card
+    back_body = Table([
+        [qr_img,
+         Paragraph(
+             f"<font size=5><b>If found, return to:</b><br/>"
+             f"{bi['address'][:50]}<br/><br/>"
+             f"Tel: {bi['contact_number']}<br/>"
+             f"Email: {bi['email']}<br/><br/>"
+             f"Property of Barangay {bi['name']}.</font>",
+             info_style
+         )]
+    ], colWidths=[0.85*inch, 2.15*inch], rowHeights=[1.1*inch])
+    back_body.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
     ]))
 
     back_data = [
         [Paragraph("<para align=center><b>OFFICIAL BARANGAY ID</b></para>", title_style)],
-        [Table([
-            [qr_img, Paragraph(f"<font size=6><b>If found, please return to:</b><br/>{bi['address']}<br/><br/>Contact: {bi['contact_number']}<br/>Email: {bi['email']}<br/><br/>This ID is the property of Barangay {bi['name']}.</font>", info_style)]
-        ], colWidths=[1.0*inch, 2.1*inch])]
+        [back_body]
     ]
-    back_table = Table(back_data, colWidths=[id_width - 0.2*inch], rowHeights=[0.35*inch, 1.6*inch])
+    back_table = Table(back_data, colWidths=[id_width - 0.1*inch], rowHeights=[0.4*inch, 1.2*inch])
     back_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d6a4f')),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+        ('VALIGN', (0, 1), (-1, 1), 'TOP'),
         ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d6a4f')),
     ]))
 
     combined = Table([[front_table, back_table]], colWidths=[id_width, id_width])
-    combined.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+    combined.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
     elements.append(combined)
     doc.build(elements)
     buffer.seek(0)
