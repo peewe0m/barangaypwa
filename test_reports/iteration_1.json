@@ -1,0 +1,49 @@
+{
+  "summary": "Tested Barangay Management System (backend + frontend). Auth, Dashboard, Residents list/create/search all work. CRITICAL bug: residents are inserted with only MongoDB _id; no application 'id' field is generated. As a result, GET /api/residents/{id}, PUT, DELETE, and POST /api/document-requests (which validates resident by 'id') all return 404. This breaks the entire Documents workflow (create request -> approve -> download PDF) and resident edit/delete from UI.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/residents", "issue": "Resident document is not assigned an 'id' field on creation. Insert uses Mongo _id only, but response returns str(result.inserted_id) as 'id'. Subsequent queries use {'id': resident_id} -> 404 always.", "priority": "CRITICAL"},
+      {"endpoint": "GET /api/residents/{resident_id}", "issue": "Always returns 404 due to missing 'id' field in stored docs.", "priority": "CRITICAL"},
+      {"endpoint": "PUT /api/residents/{resident_id}", "issue": "Always returns 404 (same root cause).", "priority": "CRITICAL"},
+      {"endpoint": "DELETE /api/residents/{resident_id}", "issue": "Always returns 404 (same root cause). UI delete button is non-functional.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/document-requests", "issue": "Resident lookup fails -> 404 'Resident not found'. Blocks entire document workflow.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "/api/residents (GET list)", "issue": "Projection excludes _id but resident objects also have no 'id' field, so frontend cannot reference individual residents by id (delete/edit broken end-to-end)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ResidentsPage", "issue": "React warning: 'Each child in a list should have a unique key prop' in rendered list.", "selector": "ResidentsPage table rows", "priority": "MEDIUM"},
+      {"component": "ResidentsPage delete button", "issue": "Will always fail because backend returns 404 (id mismatch bug above).", "selector": "trash icon in Actions", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Documents create -> approve -> download", "issue": "Cannot create any document request because resident_id never matches in DB.", "affected_selectors": ["Create Request button on /documents"]}
+    ],
+    "design_issues": [
+      {"screen": "Dashboard Demographics pie chart", "issues": ["Overlapping labels (PWD/Senior/Solo Parent text rendered on top of each other when counts are 0)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_barangay_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "In POST /api/residents, generate and persist an application 'id' (e.g., secrets.token_urlsafe(16) or str(ObjectId())) into the resident document BEFORE insert, and return that. Same pattern already used correctly in document-requests.",
+    "Verify GET/PUT/DELETE /api/residents/{id} and document-request creation after fix.",
+    "Add unique 'key' prop in ResidentsPage list rendering to remove React warning.",
+    "Fix Dashboard pie chart label overlap when slices are 0."
+  ],
+  "critical_code_review_comments": [
+    "server.py POST /api/residents (lines ~294-309): resident_doc inserted without 'id'; response fakes id from inserted_id but all subsequent queries use 'id' field — breaks CRUD and downstream Documents flow.",
+    "Pattern inconsistency: document_requests uses secrets.token_urlsafe(16) for id; residents should follow same pattern.",
+    "calculate_age uses bare except — should catch ValueError specifically.",
+    "JWT cookies use secure=False; acceptable for preview but flag for production.",
+    "server.py is 627 lines — consider splitting into routers (auth/residents/documents) for maintainability."
+  ],
+  "updated_files": ["/app/backend/tests/test_barangay_api.py"],
+  "success_rate": {"backend": "73% (11/15 meaningful tests passed; 2 skipped due to upstream failures)", "frontend": "70% (login, nav, dashboard work; CRUD/Documents broken by backend bug)"},
+  "test_credentials": "admin@barangay.gov.ph / admin123 (working)",
+  "seed_data_creation": "Created TEST_Juan Dela Cruz and TEST_DocPerson residents during tests; cleanup partially blocked by delete bug — main agent should drop residents collection or delete via Mongo after fix.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent adds 'id' field generation in POST /api/residents, re-run pytest /app/backend/tests/test_barangay_api.py — all 16 tests should pass. Then re-test UI: Residents delete, Document create -> approve -> PDF download.",
+  "rca of the issue": "Root cause: server.py POST /api/residents inserts resident_doc which contains no 'id' key. After insert, code sets resident_doc['id'] = str(result.inserted_id) ONLY on the in-memory dict returned to client; the DB document has only Mongo _id. All later endpoints (GET/PUT/DELETE/{resident_id} and POST /document-requests) look up by {'id': resident_id} which never matches. Fix: add resident_doc['id'] = secrets.token_urlsafe(16) (or str(ObjectId())) before db.residents.insert_one(resident_doc). Reproduction: POST /api/residents then GET /api/residents/{returned_id} -> 404."
+}
