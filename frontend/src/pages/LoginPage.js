@@ -91,6 +91,13 @@ export const LoginPage = () => {
 
         <div className="mt-6 text-center text-sm text-muted-foreground">
           <p>Demo: admin@barangay.gov.ph / admin123</p>
+          <a
+            href="/portal"
+            data-testid="portal-link"
+            className="inline-block mt-3 text-primary hover:underline font-medium"
+          >
+            Are you a resident? Visit our Online Portal →
+          </a>
         </div>
       </Card>
     </div>

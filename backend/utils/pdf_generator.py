@@ -1,5 +1,5 @@
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.units import inch, mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
@@ -9,101 +9,42 @@ import qrcode
 import io
 from config.system import SYSTEM_CONFIG
 
+
 def generate_qr_code(data: str) -> bytes:
-    """Generate QR code and return as bytes"""
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=10,
-        border=4,
-    )
+    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=10, border=4)
     qr.add_data(data)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
-    
-    buffer = io.BytesIO()
-    img.save(buffer, format='PNG')
-    buffer.seek(0)
-    return buffer.getvalue()
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return buf.getvalue()
 
-def generate_barangay_clearance(resident_data: dict, request_data: dict) -> bytes:
-    """Generate Barangay Clearance PDF"""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    elements = []
-    styles = getSampleStyleSheet()
-    
-    # Title style
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        textColor=colors.HexColor('#2d6a4f'),
-        spaceAfter=30,
-        alignment=TA_CENTER,
-        fontName='Helvetica-Bold'
-    )
-    
-    # Header
-    barangay_info = SYSTEM_CONFIG['barangay_info']
+
+def _base_header(elements, styles, title):
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#2d6a4f'), spaceAfter=20, alignment=TA_CENTER, fontName='Helvetica-Bold')
+    bi = SYSTEM_CONFIG['barangay_info']
     header_text = f"""
     <para align=center>
     <b>Republic of the Philippines</b><br/>
-    Province of {barangay_info['province']}<br/>
-    Municipality of {barangay_info['municipality']}<br/>
-    <b>BARANGAY {barangay_info['name'].upper()}</b><br/>
+    Province of {bi['province']}<br/>
+    Municipality of {bi['municipality']}<br/>
+    <b>BARANGAY {bi['name'].upper()}</b><br/>
     Office of the Barangay Captain
     </para>
     """
     elements.append(Paragraph(header_text, styles['Normal']))
     elements.append(Spacer(1, 0.3*inch))
-    
-    # Document title
-    elements.append(Paragraph("BARANGAY CLEARANCE", title_style))
-    elements.append(Spacer(1, 0.3*inch))
-    
-    # Document number and date
-    doc_number = request_data.get('document_number', 'N/A')
-    issue_date = datetime.fromisoformat(request_data.get('issue_date')).strftime('%B %d, %Y') if request_data.get('issue_date') else datetime.now().strftime('%B %d, %Y')
-    
-    elements.append(Paragraph(f"<b>Clearance No.:</b> {doc_number}", styles['Normal']))
-    elements.append(Paragraph(f"<b>Date Issued:</b> {issue_date}", styles['Normal']))
-    elements.append(Spacer(1, 0.3*inch))
-    
-    # TO WHOM IT MAY CONCERN
-    elements.append(Paragraph("<b>TO WHOM IT MAY CONCERN:</b>", styles['Normal']))
+    elements.append(Paragraph(title, title_style))
     elements.append(Spacer(1, 0.2*inch))
-    
-    # Body
-    body_style = ParagraphStyle(
-        'BodyText',
-        parent=styles['Normal'],
-        alignment=TA_JUSTIFY,
-        spaceAfter=12,
-        leading=20
-    )
-    
-    purpose = request_data.get('purpose', 'General Purpose')
-    body_text = f"""
-    This is to certify that <b>{resident_data.get('full_name', 'N/A').upper()}</b>, 
-    {resident_data.get('age', 'N/A')} years old, {resident_data.get('civil_status', 'N/A')}, 
-    Filipino citizen, and a resident of {resident_data.get('address', 'N/A')}, is personally known 
-    to me to be of good moral character and law-abiding citizen in this community.
-    <br/><br/>
-    This certification is being issued upon the request of the above-named person for 
-    <b>{purpose}</b> and for whatever legal purpose it may serve.
-    <br/><br/>
-    Issued this {issue_date} at Barangay {barangay_info['name']}, {barangay_info['municipality']}, 
-    {barangay_info['province']}, Philippines.
-    """
-    elements.append(Paragraph(body_text, body_style))
-    elements.append(Spacer(1, 0.5*inch))
-    
-    # Signature
+
+
+def _signature_block(elements, styles):
+    bi = SYSTEM_CONFIG['barangay_info']
     sig_data = [
         ['', ''],
-        [Paragraph(f"<b>{barangay_info['captain_name'].upper()}</b>", styles['Normal']), 
-         Paragraph(f"<b>{barangay_info['secretary_name'].upper()}</b>", styles['Normal'])],
+        [Paragraph(f"<b>{bi['captain_name'].upper()}</b>", styles['Normal']),
+         Paragraph(f"<b>{bi['secretary_name'].upper()}</b>", styles['Normal'])],
         ['Punong Barangay', 'Barangay Secretary']
     ]
     sig_table = Table(sig_data, colWidths=[3*inch, 3*inch])
@@ -113,161 +54,146 @@ def generate_barangay_clearance(resident_data: dict, request_data: dict) -> byte
         ('LINEABOVE', (1, 1), (1, 1), 1, colors.black),
     ]))
     elements.append(sig_table)
-    
-    # QR Code
-    qr_data = f"CLEARANCE|{doc_number}|{resident_data.get('full_name')}|{issue_date}"
-    qr_bytes = generate_qr_code(qr_data)
-    qr_image = Image(io.BytesIO(qr_bytes), width=1*inch, height=1*inch)
-    elements.append(Spacer(1, 0.3*inch))
-    elements.append(qr_image)
-    
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
 
-def generate_certificate_of_residency(resident_data: dict, request_data: dict) -> bytes:
-    """Generate Certificate of Residency PDF"""
+
+def _generic_certificate(title, doc_type_prefix, body_template):
+    def _gen(resident_data: dict, request_data: dict) -> bytes:
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        elements = []
+        styles = getSampleStyleSheet()
+        _base_header(elements, styles, title)
+        doc_number = request_data.get('document_number', 'N/A')
+        issue_date = datetime.fromisoformat(request_data.get('issue_date')).strftime('%B %d, %Y') if request_data.get('issue_date') else datetime.now().strftime('%B %d, %Y')
+        elements.append(Paragraph(f"<b>Document No.:</b> {doc_number}", styles['Normal']))
+        elements.append(Paragraph(f"<b>Date Issued:</b> {issue_date}", styles['Normal']))
+        elements.append(Spacer(1, 0.2*inch))
+        elements.append(Paragraph("<b>TO WHOM IT MAY CONCERN:</b>", styles['Normal']))
+        elements.append(Spacer(1, 0.15*inch))
+        body_style = ParagraphStyle('Body', parent=styles['Normal'], alignment=TA_JUSTIFY, spaceAfter=12, leading=20)
+        body_text = body_template.format(
+            full_name=resident_data.get('full_name', 'N/A').upper(),
+            age=resident_data.get('age', 'N/A'),
+            civil_status=resident_data.get('civil_status', 'N/A'),
+            address=resident_data.get('address', 'N/A'),
+            purpose=request_data.get('purpose', 'General Purpose'),
+            issue_date=issue_date,
+        )
+        elements.append(Paragraph(body_text, body_style))
+        elements.append(Spacer(1, 0.4*inch))
+        _signature_block(elements, styles)
+        qr_data = f"{doc_type_prefix}|{doc_number}|{resident_data.get('full_name')}|{issue_date}"
+        qr_bytes = generate_qr_code(qr_data)
+        qr_image = Image(io.BytesIO(qr_bytes), width=1*inch, height=1*inch)
+        elements.append(Spacer(1, 0.3*inch))
+        elements.append(qr_image)
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer.getvalue()
+    return _gen
+
+
+generate_barangay_clearance = _generic_certificate(
+    "BARANGAY CLEARANCE", "CLEARANCE",
+    "This is to certify that <b>{full_name}</b>, {age} years old, {civil_status}, Filipino citizen, and a resident of {address}, is personally known to me to be of good moral character and law-abiding citizen in this community.<br/><br/>This certification is being issued upon the request of the above-named person for <b>{purpose}</b> and for whatever legal purpose it may serve.<br/><br/>Issued this {issue_date}."
+)
+
+generate_certificate_of_residency = _generic_certificate(
+    "CERTIFICATE OF RESIDENCY", "RESIDENCY",
+    "This is to certify that <b>{full_name}</b>, {age} years old, {civil_status}, is a bonafide resident of {address} and has been residing in this barangay.<br/><br/>This certification is issued upon the request of the above-named person for <b>{purpose}</b>.<br/><br/>Issued this {issue_date}."
+)
+
+generate_certificate_of_indigency = _generic_certificate(
+    "CERTIFICATE OF INDIGENCY", "INDIGENCY",
+    "This is to certify that <b>{full_name}</b>, {age} years old, {civil_status}, residing at {address}, belongs to an indigent family in this barangay.<br/><br/>This certification is issued for the purpose of <b>{purpose}</b>.<br/><br/>Issued this {issue_date}."
+)
+
+generate_good_moral = _generic_certificate(
+    "GOOD MORAL CHARACTER CERTIFICATE", "GOODMORAL",
+    "This is to certify that <b>{full_name}</b>, {age} years old, {civil_status}, residing at {address}, is of good moral character and has no derogatory record in this barangay.<br/><br/>This certification is issued upon the request of the above-named person for <b>{purpose}</b>.<br/><br/>Issued this {issue_date}."
+)
+
+generate_first_time_job_seeker = _generic_certificate(
+    "FIRST TIME JOB SEEKER CERTIFICATE", "FTJSEEKER",
+    "This is to certify that <b>{full_name}</b>, {age} years old, residing at {address}, is a first-time job seeker and is qualified to avail of the benefits under R.A. 11261.<br/><br/>This certification is issued for <b>{purpose}</b>.<br/><br/>Issued this {issue_date}."
+)
+
+generate_solo_parent = _generic_certificate(
+    "SOLO PARENT CERTIFICATE", "SOLOPARENT",
+    "This is to certify that <b>{full_name}</b>, {age} years old, {civil_status}, residing at {address}, is a recognized solo parent under R.A. 8972.<br/><br/>This certification is issued for <b>{purpose}</b>.<br/><br/>Issued this {issue_date}."
+)
+
+generate_cohabitation = _generic_certificate(
+    "CERTIFICATE OF COHABITATION", "COHABITATION",
+    "This is to certify that <b>{full_name}</b>, {age} years old, has been cohabiting with their partner at {address}.<br/><br/>This certification is issued for <b>{purpose}</b>.<br/><br/>Issued this {issue_date}."
+)
+
+generate_business_clearance_pdf = _generic_certificate(
+    "BUSINESS CLEARANCE", "BUSINESS",
+    "This is to certify that <b>{full_name}</b>, residing at {address}, has been granted a Barangay Business Clearance for the purpose of <b>{purpose}</b>.<br/><br/>The business owner has complied with the requirements set forth by this Barangay.<br/><br/>Issued this {issue_date}."
+)
+
+
+def generate_barangay_id(resident_data: dict, id_data: dict, photo_bytes: bytes = None) -> bytes:
+    """Generate Barangay ID Card PDF (front + back side by side)"""
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    id_width = 3.375 * inch
+    id_height = 2.125 * inch
+    doc = SimpleDocTemplate(buffer, pagesize=(id_width * 2 + 0.5*inch, id_height + 0.5*inch),
+                            leftMargin=0.25*inch, rightMargin=0.25*inch,
+                            topMargin=0.25*inch, bottomMargin=0.25*inch)
     elements = []
     styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        textColor=colors.HexColor('#2d6a4f'),
-        spaceAfter=30,
-        alignment=TA_CENTER,
-        fontName='Helvetica-Bold'
-    )
-    
-    barangay_info = SYSTEM_CONFIG['barangay_info']
-    header_text = f"""
-    <para align=center>
-    <b>Republic of the Philippines</b><br/>
-    Province of {barangay_info['province']}<br/>
-    Municipality of {barangay_info['municipality']}<br/>
-    <b>BARANGAY {barangay_info['name'].upper()}</b>
-    </para>
-    """
-    elements.append(Paragraph(header_text, styles['Normal']))
-    elements.append(Spacer(1, 0.3*inch))
-    
-    elements.append(Paragraph("CERTIFICATE OF RESIDENCY", title_style))
-    elements.append(Spacer(1, 0.3*inch))
-    
-    doc_number = request_data.get('document_number', 'N/A')
-    issue_date = datetime.fromisoformat(request_data.get('issue_date')).strftime('%B %d, %Y') if request_data.get('issue_date') else datetime.now().strftime('%B %d, %Y')
-    
-    elements.append(Paragraph(f"<b>Certificate No.:</b> {doc_number}", styles['Normal']))
-    elements.append(Paragraph(f"<b>Date Issued:</b> {issue_date}", styles['Normal']))
-    elements.append(Spacer(1, 0.3*inch))
-    
-    elements.append(Paragraph("<b>TO WHOM IT MAY CONCERN:</b>", styles['Normal']))
-    elements.append(Spacer(1, 0.2*inch))
-    
-    body_style = ParagraphStyle('BodyText', parent=styles['Normal'], alignment=TA_JUSTIFY, spaceAfter=12, leading=20)
-    
-    years_resident = request_data.get('years_resident', 'several')
-    body_text = f"""
-    This is to certify that <b>{resident_data.get('full_name', 'N/A').upper()}</b>, 
-    {resident_data.get('age', 'N/A')} years old, {resident_data.get('civil_status', 'N/A')}, 
-    is a bonafide resident of {resident_data.get('address', 'N/A')}, since {years_resident} year(s).
-    <br/><br/>
-    This certification is issued upon the request of the above-named person for whatever legal 
-    purpose it may serve.
-    """
-    elements.append(Paragraph(body_text, body_style))
-    elements.append(Spacer(1, 0.5*inch))
-    
-    sig_data = [
-        [''],
-        [Paragraph(f"<b>{barangay_info['captain_name'].upper()}</b>", styles['Normal'])],
-        ['Punong Barangay']
-    ]
-    sig_table = Table(sig_data, colWidths=[3*inch])
-    sig_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('LINEABOVE', (0, 1), (0, 1), 1, colors.black),
-    ]))
-    elements.append(sig_table)
-    
-    qr_data = f"RESIDENCY|{doc_number}|{resident_data.get('full_name')}|{issue_date}"
-    qr_bytes = generate_qr_code(qr_data)
-    qr_image = Image(io.BytesIO(qr_bytes), width=1*inch, height=1*inch)
-    elements.append(Spacer(1, 0.3*inch))
-    elements.append(qr_image)
-    
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
+    bi = SYSTEM_CONFIG['barangay_info']
+    id_number = id_data.get('id_number', 'N/A')
 
-def generate_certificate_of_indigency(resident_data: dict, request_data: dict) -> bytes:
-    """Generate Certificate of Indigency PDF"""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    elements = []
-    styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        textColor=colors.HexColor('#2d6a4f'),
-        spaceAfter=30,
-        alignment=TA_CENTER,
-        fontName='Helvetica-Bold'
-    )
-    
-    barangay_info = SYSTEM_CONFIG['barangay_info']
-    header_text = f"""
-    <para align=center>
-    <b>Republic of the Philippines</b><br/>
-    Province of {barangay_info['province']}<br/>
-    Municipality of {barangay_info['municipality']}<br/>
-    <b>BARANGAY {barangay_info['name'].upper()}</b>
-    </para>
-    """
-    elements.append(Paragraph(header_text, styles['Normal']))
-    elements.append(Spacer(1, 0.3*inch))
-    
-    elements.append(Paragraph("CERTIFICATE OF INDIGENCY", title_style))
-    elements.append(Spacer(1, 0.3*inch))
-    
-    doc_number = request_data.get('document_number', 'N/A')
-    issue_date = datetime.fromisoformat(request_data.get('issue_date')).strftime('%B %d, %Y') if request_data.get('issue_date') else datetime.now().strftime('%B %d, %Y')
-    
-    elements.append(Paragraph(f"<b>Certificate No.:</b> {doc_number}", styles['Normal']))
-    elements.append(Spacer(1, 0.3*inch))
-    
-    elements.append(Paragraph("<b>TO WHOM IT MAY CONCERN:</b>", styles['Normal']))
-    elements.append(Spacer(1, 0.2*inch))
-    
-    body_style = ParagraphStyle('BodyText', parent=styles['Normal'], alignment=TA_JUSTIFY, spaceAfter=12, leading=20)
-    
-    body_text = f"""
-    This is to certify that <b>{resident_data.get('full_name', 'N/A').upper()}</b>, 
-    {resident_data.get('age', 'N/A')} years old, {resident_data.get('civil_status', 'N/A')}, 
-    residing at {resident_data.get('address', 'N/A')}, belongs to an indigent family in this barangay.
-    <br/><br/>
-    This certification is issued for the purpose of <b>{request_data.get('purpose', 'Medical Assistance')}</b>.
-    """
-    elements.append(Paragraph(body_text, body_style))
-    elements.append(Spacer(1, 0.5*inch))
-    
-    sig_data = [
-        [''],
-        [Paragraph(f"<b>{barangay_info['captain_name'].upper()}</b>", styles['Normal'])],
-        ['Punong Barangay']
+    title_style = ParagraphStyle('IDTitle', fontSize=8, alignment=TA_CENTER, fontName='Helvetica-Bold', textColor=colors.white)
+    info_style = ParagraphStyle('IDInfo', fontSize=7, alignment=TA_LEFT)
+
+    qr_data = f"BID|{id_number}|{resident_data.get('full_name')}|{bi['name']}"
+    qr_bytes = generate_qr_code(qr_data)
+    qr_img = Image(io.BytesIO(qr_bytes), width=0.8*inch, height=0.8*inch)
+
+    photo_cell = Paragraph("<para align=center><b>PHOTO</b></para>", info_style)
+    if photo_bytes:
+        try:
+            photo_cell = Image(io.BytesIO(photo_bytes), width=0.9*inch, height=1.1*inch)
+        except Exception:
+            pass
+
+    addr_truncated = (resident_data.get('address', '') or '')[:40]
+    front_data = [
+        [Paragraph(f"<para align=center><b>BARANGAY {bi['name'].upper()}</b><br/>{bi['municipality']}, {bi['province']}</para>", title_style)],
+        [Table([
+            [photo_cell,
+             Paragraph(f"<b>{resident_data.get('full_name', '').upper()}</b><br/><font size=6>ID #: {id_number}<br/>Age: {resident_data.get('age')}<br/>Gender: {resident_data.get('gender')}<br/>Civil Status: {resident_data.get('civil_status')}<br/>Address: {addr_truncated}</font>", info_style)],
+        ], colWidths=[1.1*inch, 2.0*inch])]
     ]
-    sig_table = Table(sig_data, colWidths=[3*inch])
-    sig_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('LINEABOVE', (0, 1), (0, 1), 1, colors.black),
+    front_table = Table(front_data, colWidths=[id_width - 0.2*inch], rowHeights=[0.35*inch, 1.6*inch])
+    front_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d6a4f')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d6a4f')),
     ]))
-    elements.append(sig_table)
-    
+
+    back_data = [
+        [Paragraph("<para align=center><b>OFFICIAL BARANGAY ID</b></para>", title_style)],
+        [Table([
+            [qr_img, Paragraph(f"<font size=6><b>If found, please return to:</b><br/>{bi['address']}<br/><br/>Contact: {bi['contact_number']}<br/>Email: {bi['email']}<br/><br/>This ID is the property of Barangay {bi['name']}.</font>", info_style)]
+        ], colWidths=[1.0*inch, 2.1*inch])]
+    ]
+    back_table = Table(back_data, colWidths=[id_width - 0.2*inch], rowHeights=[0.35*inch, 1.6*inch])
+    back_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d6a4f')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#2d6a4f')),
+    ]))
+
+    combined = Table([[front_table, back_table]], colWidths=[id_width, id_width])
+    combined.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+    elements.append(combined)
     doc.build(elements)
     buffer.seek(0)
     return buffer.getvalue()

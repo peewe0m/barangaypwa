@@ -7,7 +7,18 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResidentsPage } from './pages/ResidentsPage';
 import { DocumentsPage } from './pages/DocumentsPage';
-import { PlaceholderPage } from './pages/PlaceholderPage';
+import { HouseholdsPage } from './pages/HouseholdsPage';
+import { BlotterPage } from './pages/BlotterPage';
+import { BusinessPage } from './pages/BusinessPage';
+import { HealthPage } from './pages/HealthPage';
+import { WelfarePage } from './pages/WelfarePage';
+import { AppointmentsPage } from './pages/AppointmentsPage';
+import { PaymentsPage } from './pages/PaymentsPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { BarangayIDPage } from './pages/BarangayIDPage';
+import { PortalPage } from './pages/PortalPage';
+import { PortalRequestsPage } from './pages/PortalRequestsPage';
 import '@/App.css';
 
 function App() {
@@ -16,155 +27,28 @@ function App() {
       <BrowserRouter>
         <Toaster position="top-right" richColors />
         <Routes>
+          {/* Public Portal */}
+          <Route path="/portal" element={<PortalPage />} />
+
+          {/* Auth */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/residents"
-            element={
-              <ProtectedRoute>
-                <ResidentsPage />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/households"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Households"
-                  description="Manage household records and family groupings"
-                />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/documents"
-            element={
-              <ProtectedRoute>
-                <DocumentsPage />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/business"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Business Management"
-                  description="Manage business clearances and permits"
-                />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/blotter"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Blotter Management"
-                  description="Record and manage barangay incidents and complaints"
-                />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/health"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Health Records"
-                  description="Manage health records and vaccination data"
-                />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/welfare"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Social Welfare"
-                  description="Manage PWD, senior citizens, and solo parent records"
-                />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/barangay-id"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Barangay ID System"
-                  description="Generate and manage barangay ID cards"
-                />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/appointments"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Appointments"
-                  description="Manage appointment scheduling and queue system"
-                />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/payments"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Payments & Collections"
-                  description="Manage payments and official receipts"
-                />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/reports"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Reports"
-                  description="Generate and export various reports"
-                />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <PlaceholderPage
-                  title="Settings"
-                  description="System configuration and user management"
-                />
-              </ProtectedRoute>
-            }
-          />
+
+          {/* Protected admin routes */}
+          <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/residents" element={<ProtectedRoute><ResidentsPage /></ProtectedRoute>} />
+          <Route path="/households" element={<ProtectedRoute><HouseholdsPage /></ProtectedRoute>} />
+          <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
+          <Route path="/portal-requests" element={<ProtectedRoute><PortalRequestsPage /></ProtectedRoute>} />
+          <Route path="/business" element={<ProtectedRoute><BusinessPage /></ProtectedRoute>} />
+          <Route path="/blotter" element={<ProtectedRoute><BlotterPage /></ProtectedRoute>} />
+          <Route path="/health" element={<ProtectedRoute><HealthPage /></ProtectedRoute>} />
+          <Route path="/welfare" element={<ProtectedRoute><WelfarePage /></ProtectedRoute>} />
+          <Route path="/barangay-id" element={<ProtectedRoute><BarangayIDPage /></ProtectedRoute>} />
+          <Route path="/appointments" element={<ProtectedRoute><AppointmentsPage /></ProtectedRoute>} />
+          <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

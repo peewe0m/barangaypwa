@@ -1,0 +1,48 @@
+{
+  "summary": "Re-tested Barangay Management System after resident.id fix and full module build-out. Backend: 46/47 tests PASS (97.9%) across Residents (CRUD + photo + update), Households, Blotter, Business, Health, Welfare, Appointments, Payments, Barangay ID, Portal (public + admin), Reports, and ALL 8 document-type PDFs. Frontend: all 13 admin routes load, public /portal submission returns tracking number, Edit Resident dialog opens with prefilled values. ONE backend bug remains: GET /api/barangay-ids/{id}/download returns 500 due to reportlab LayoutError in pdf_generator.py.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/barangay-ids/{id}/download", "issue": "reportlab.platypus.doctemplate.LayoutError at utils/pdf_generator.py:197 — Flowable Table 1x2 (tallest row 146.4pt) does not fit on the ID-card page template. PDF generation crashes -> 500.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Portal Track Status tab", "issue": "Submitted tracking number was not surfaced via the Track tab UI in automated test (selector for the track input/button may need a stable data-testid). Backend /api/portal/track/{tracking_number} works (verified via API).", "affected_selectors": ["portal-tab-track", "track input/submit"]}
+    ],
+    "design_issues": [
+      {"screen": "Edit Resident dialog", "issues": ["Birthdate uses native browser <input type=\"date\"> instead of shadcn Calendar component"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_modules.py",
+    "/app/backend/tests/test_barangay_api.py",
+    "/app/test_reports/pytest/pytest_modules.xml"
+  ],
+  "action_items": [
+    "Fix reportlab LayoutError in /app/backend/utils/pdf_generator.py (generate_barangay_id ~L197). Likely need to reduce cell height, set repeatRows/splitInRow=0, or enlarge the PageSize. Reproduce: POST /api/barangay-ids with any resident_id, then GET /api/barangay-ids/{id}/download.",
+    "Add data-testid to Portal Track Status input + submit button (e.g., portal-track-input, portal-track-button) for reliable UI tracking flow.",
+    "Consider swapping native date input for shadcn Calendar in Resident form (UX consistency).",
+    "Refactor: server.py is now 1062 lines; split into routers (residents/households/documents/portal/etc.) for maintainability."
+  ],
+  "critical_code_review_comments": [
+    "server.py L1062 — file is too long; recommend FastAPI router split per resource.",
+    "PUT /api/appointments/{appt_id}/status receives 'status' as a query param via FastAPI Query coercion (works) but is undocumented; consider moving to Pydantic body for clarity.",
+    "POST /api/seed/sample-data is auth-protected (good) but lacks role check; any authenticated user can wipe/seed data.",
+    "/api/barangay-ids POST silently returns the existing active ID without indicating it was a duplicate (no 200 vs 201 distinction).",
+    "calculate_age now correctly catches only ValueError (good — previous bare except fixed).",
+    "JWT cookies still secure=False (acceptable for preview; flag for production).",
+    "CORS: allow_origins reads FRONTEND_URL env; ensure production sets it explicitly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_modules.py (new — 47 tests for all new modules)"
+  ],
+  "success_rate": {"backend": "97.9% (46/47)", "frontend": "95% (all routes + portal submit + edit dialog OK; track UI flow not verified)"},
+  "test_credentials": "admin@barangay.gov.ph / admin123 (working)",
+  "seed_data_creation": "Used POST /api/seed/sample-data which inserted 12 residents, 8 doc-requests, 3 blotters, 3 businesses. Verified data present on Residents page.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Critical resident.id bug from iteration_1 is fully fixed (verified via 46 passing tests). Only outstanding backend bug: Barangay ID PDF generation (reportlab LayoutError). After main agent fixes pdf_generator.py, re-run: pytest /app/backend/tests/test_modules.py::TestBarangayID::test_download. All 8 document-type PDFs already generate successfully.",
+  "rca of the issue": "Barangay ID PDF: in utils/pdf_generator.py the generate_barangay_id() builds a Table with cell(0,0) whose flowable content (146.4 pt tall) exceeds the available frame height on the small ID-card pagesize, triggering reportlab's LayoutError. Fix options: (a) reduce text/spacer sizes inside the cell, (b) enable cell content splitting via Table(splitByRow=1), (c) use a larger pagesize, or (d) catch and fall back to a simpler layout."
+}

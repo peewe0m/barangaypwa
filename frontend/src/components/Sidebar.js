@@ -17,6 +17,7 @@ import {
   LogOut,
   Menu,
   X,
+  Globe,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/button';
@@ -27,6 +28,7 @@ const menuItems = [
   { path: '/residents', label: 'Residents', icon: Users },
   { path: '/households', label: 'Households', icon: HomeIcon },
   { path: '/documents', label: 'Documents', icon: FileText },
+  { path: '/portal-requests', label: 'Online Requests', icon: Globe },
   { path: '/business', label: 'Business', icon: Briefcase },
   { path: '/blotter', label: 'Blotter', icon: AlertCircle },
   { path: '/health', label: 'Health', icon: Heart },
