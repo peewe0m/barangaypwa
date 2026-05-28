@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import API_CONFIG from '../config/api';
 
+// NOTE:
+// Native EventSource cannot reliably send cookies/headers cross-origin.
+// This hook uses fetch + ReadableStream to read the SSE body with `credentials: "include"`.
 export function useRealtimeRefresh(refresh, enabled = true) {
   const refreshRef = useRef(refresh);
 
@@ -9,32 +12,61 @@ export function useRealtimeRefresh(refresh, enabled = true) {
   }, [refresh]);
 
   useEffect(() => {
-    if (!enabled || typeof window === 'undefined' || !window.EventSource) return undefined;
+    if (!enabled || typeof window === 'undefined') return undefined;
 
-    // EventSource in browsers does NOT support `withCredentials`.
-    // Use Authorization header instead (we rely on the HttpOnly cookie being readable server-side).
-    // If your backend only checks cookies, this will still work only when credentials cookies are sent.
-    // Cookies with EventSource are unreliable cross-origin.
-    // Send Authorization header using the existing access_token cookie.
-    const accessToken = document.cookie
-      .split(';')
-      .map((c) => c.trim())
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1];
+    const controller = new AbortController();
+    const url = `${API_CONFIG.baseURL}${API_CONFIG.endpoints.events}`;
 
-    const source = new EventSource(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.events}`, {
-      headers: accessToken ? { Authorization: `Bearer ${decodeURIComponent(accessToken)}` } : {}
-    });
-
+    let buffer = '';
     const handleChange = () => {
       refreshRef.current?.();
     };
 
-    source.addEventListener('data-change', handleChange);
+    fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      signal: controller.signal,
+      headers: {
+        Accept: 'text/event-stream',
+      },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          // stop on auth failures etc.
+          return;
+        }
+
+        const reader = res.body?.getReader?.();
+        if (!reader) return;
+
+        const decoder = new TextDecoder('utf-8');
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Very small SSE parser: split on double newlines between events.
+          // We only care about lines like: event: data-change
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+
+          for (const part of parts) {
+            const evtLine = part.split('\n').find((l) => l.startsWith('event:'));
+            const eventName = evtLine ? evtLine.replace('event:', '').trim() : '';
+            if (eventName === 'data-change') {
+              handleChange();
+            }
+          }
+        }
+      })
+      .catch(() => {
+        // ignore fetch/read errors (network reconnect not implemented)
+      });
 
     return () => {
-      source.removeEventListener('data-change', handleChange);
-      source.close();
+      controller.abort();
     };
   }, [enabled]);
 }
+
