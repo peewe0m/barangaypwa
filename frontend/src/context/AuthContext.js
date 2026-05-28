@@ -45,10 +45,9 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkAuth = async () => {
-    if (!hasAuthHint()) {
-      setUser(false);
-      setLoading(false);
-      return;
+    // Always attempt /auth/me — the server is the source of truth.
+    // The auth_hint cookie is unreliable across origins and browser quirks,
+    // so we never short-circuit based on it alone.
     }
 
     try {
