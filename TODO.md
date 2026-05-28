@@ -1,22 +1,21 @@
-# TODO - Barangay App (Privacy + Security Compliance)
+# TODO - Portal Request -> Document Request workflow fix
 
-## Phase 1 (Code changes)
-- [x] B) Replace `window.confirm` with themed `AlertDialog` confirm dialogs
-- [x] D) Implement audit log viewer filters + CSV export (frontend + backend)
-- [x] E) Add automated "permissionAction" security scan + tests
-- [x] F) HTTPS-only hardening + secure cookies/headers
-- [x] G) Make private file storage: stop public URLs; use signed URLs or authenticated proxy
+## Goal
+Ensure portal requests marked by admin do **not** immediately appear in Documents/download flow. Only when admin performs document approval/link should the document request appear and become downloadable.
 
-## Phase 2 (Documentation + policy)
-- [x] Create Privacy Impact Assessment (PIA) documentation
-- [x] Official data retention policy
-- [x] Backup and restore procedure tested regularly (doc)
-- [x] Disaster recovery plan (doc)
-- [x] Role/action permission operating procedure + staff training (doc)
-- [x] Terms/privacy notice on public portal (frontend)
+## Steps
+1. Inspect current portal processing endpoint `PUT /portal-requests/:reqId/process` and confirm it creates `document_requests` immediately.
+2. Update backend:
+   - Change `/portal-requests/:reqId/process` to only set portal status to `waiting_for_admin_approval` (no document_requests creation yet).
+   - Add new endpoint to link/create the `document_requests` record when admin approves/linking.
+3. Update backend document listing `GET /document-requests` to exclude any non-ready statuses if added.
+4. Update frontend:
+   - Update `PortalRequestsPage` to call new backend endpoint for approval/linking, not the old process endpoint.
+5. Verify portal download endpoints:
+   - Ensure portal download still requires document_request_id to exist and document status to be approved.
+6. Verify reports:
+   - Payments/reports should still populate only after download.
+7. Run backend/frontend locally if available and sanity test flows.
+8. Update UI/logic text if needed (portal status labels).
 
-## Phase 3 (Verification)
-- [x] Run backend unit tests
-- [x] Run frontend build/tests
-- [x] Manual test checklist for approvals/downloads/audit/export
 

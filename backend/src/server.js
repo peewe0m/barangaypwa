@@ -1762,8 +1762,38 @@ api.put("/portal-requests/:reqId/process", requireUser, async (req, res, next) =
     const portalReq = await req.db.collection("portal_requests").findOne(notDeleted({ id: req.params.reqId }));
     if (!portalReq) return bad(res, 404, "Request not found");
 
+    // After this action, the portal request will wait for admin to link/approve into a document request.
+    if (portalReq.status === "waiting_for_admin_approval" || portalReq.document_request_id) {
+      return res.json({ message: "Request already processed", status: portalReq.status, document_request_id: portalReq.document_request_id || null });
+    }
+
+    await req.db.collection("portal_requests").updateOne(
+      { id: req.params.reqId },
+      {
+        $set: {
+          status: "waiting_for_admin_approval",
+          processed_at: now(),
+          processed_by: req.user._id
+        }
+      }
+    );
+
+    res.json({
+      message: "Request marked processed; waiting for admin approval",
+      status: "waiting_for_admin_approval",
+      document_request_id: null
+    });
+  } catch (error) { next(error); }
+});
+
+// Admin action to create/link a document request from an online portal request.
+api.put("/portal-requests/:reqId/link-document", requireUser, async (req, res, next) => {
+  try {
+    const portalReq = await req.db.collection("portal_requests").findOne(notDeleted({ id: req.params.reqId }));
+    if (!portalReq) return bad(res, 404, "Request not found");
+
     if (portalReq.document_request_id) {
-      return res.json({ message: "Request already processed", document_request_id: portalReq.document_request_id });
+      return res.json({ message: "Document already linked", document_request_id: portalReq.document_request_id });
     }
 
     const residentId = portalReq.resident_id || portalReq.resident_id_from_portal || portalReq.residentId || portalReq.resident_id_number;
@@ -1782,51 +1812,50 @@ api.put("/portal-requests/:reqId/process", requireUser, async (req, res, next) =
       }
     }
 
-    let requestDoc = null;
-    let createdDocReq = null;
-
-    if (residentDoc) {
-      const documentType = portalReq.document_type;
-      requestDoc = {
-        id: token(),
-        resident_id: residentDoc.id,
-        document_type: documentType,
-        purpose: portalReq.purpose,
-        status: "pending",
-        status_history: [lifecycleEvent("pending", req.user._id, "Portal request processed into document request")],
-        document_number: docNumber(documentType),
-        additional_details: {
-          ...(portalReq.additional_details || {}),
-          portal_request_id: portalReq.id,
-          portal_tracking_number: portalReq.tracking_number,
-          applicant_photo_url: portalReq.photo_url || null,
-          applicant_photo_attachment: portalReq.photo_attachment || null
-        },
-        created_at: now(),
-        created_by: req.user._id
-      };
-
-      const insertResult = await req.db.collection("document_requests").insertOne(requestDoc);
-      createdDocReq = await req.db.collection("document_requests").findOne({ _id: insertResult.insertedId });
-      delete createdDocReq.created_by;
+    if (!residentDoc) {
+      return bad(res, 404, "Resident not found. Cannot link document.");
     }
+
+    const documentType = portalReq.document_type;
+    const requestDoc = {
+      id: token(),
+      resident_id: residentDoc.id,
+      document_type: documentType,
+      purpose: portalReq.purpose,
+      status: "pending",
+      status_history: [lifecycleEvent("pending", req.user._id, "Portal request linked into document request")],
+      document_number: docNumber(documentType),
+      additional_details: {
+        ...(portalReq.additional_details || {}),
+        portal_request_id: portalReq.id,
+        portal_tracking_number: portalReq.tracking_number,
+        applicant_photo_url: portalReq.photo_url || null,
+        applicant_photo_attachment: portalReq.photo_attachment || null
+      },
+      created_at: now(),
+      created_by: req.user._id
+    };
+
+    const insertResult = await req.db.collection("document_requests").insertOne(requestDoc);
+    const createdDocReq = await req.db.collection("document_requests").findOne({ _id: insertResult.insertedId });
+    delete createdDocReq.created_by;
 
     await req.db.collection("portal_requests").updateOne(
       { id: req.params.reqId },
       {
         $set: {
-          status: "processed",
-          processed_at: now(),
-          processed_by: req.user._id,
-          ...(requestDoc ? { document_request_id: requestDoc.id } : {})
+          document_request_id: requestDoc.id,
+          status: "linked",
+          linked_at: now(),
+          linked_by: req.user._id
         }
       }
     );
 
     res.json({
-      message: "Request processed",
-      document_request_id: requestDoc?.id || null,
-      document_request: createdDocReq ? serialize({ ...createdDocReq, id: requestDoc.id }) : null
+      message: "Document linked",
+      document_request_id: requestDoc.id,
+      document_request: serialize({ ...createdDocReq, id: requestDoc.id })
     });
   } catch (error) { next(error); }
 });

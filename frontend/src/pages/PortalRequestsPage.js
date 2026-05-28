@@ -32,10 +32,20 @@ export const PortalRequestsPage = () => {
   const handleProcess = async (id) => {
     try {
       await axios.put(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.processPortalRequest(id)}`, {}, { withCredentials: true });
-      toast.success('Request marked as processed');
+      toast.success('Request marked as processed (waiting for admin approval)');
       fetchAll();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to process request');
+    }
+  };
+
+  const handleLinkToDocument = async (id) => {
+    try {
+      await axios.put(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.linkPortalRequestToDocument(id)}`, {}, { withCredentials: true });
+      toast.success('Document linked and ready for approval');
+      fetchAll();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to link document');
     }
   };
 
@@ -62,9 +72,15 @@ export const PortalRequestsPage = () => {
                   </div>
                   <h3 className="font-heading font-semibold mt-2">{r.full_name}</h3>
                 </div>
-                {r.status !== 'processed' && (
+                {r.status === 'submitted' && (
                   <Button size="sm" onClick={() => handleProcess(r.id)} data-testid={`process-${r.id}`} className="bg-primary hover:bg-primary/90 hover:text-white">
                     Mark Processed
+                  </Button>
+                )}
+
+                {r.status === 'waiting_for_admin_approval' && (
+                  <Button size="sm" onClick={() => handleLinkToDocument(r.id)} data-testid={`link-${r.id}`} variant="outline" className="border-primary text-primary hover:bg-primary/10">
+                    Link to Document Request
                   </Button>
                 )}
               </div>

@@ -189,6 +189,7 @@ export const API_CONFIG = {
     trackDownload: (tn) => `/portal/track/${tn}/download`,
     portalRequests: '/portal-requests',
     processPortalRequest: (id) => `/portal-requests/${id}/process`,
+    linkPortalRequestToDocument: (id) => `/portal-requests/${id}/link-document`,
 
 
     // Seed
