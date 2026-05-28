@@ -77,7 +77,8 @@ axios.interceptors.response.use(
       } catch (refreshError) {
         processRefreshQueue(refreshError);
         // Refresh failed — clear auth hint so the app knows the session is gone
-        document.cookie = 'auth_hint=; Max-Age=0; path=/';
+        const isProd = window.location.protocol === 'https:';
+        document.cookie = `auth_hint=; Max-Age=0; path=/; SameSite=${isProd ? 'None' : 'Lax'}${isProd ? '; Secure' : ''}`;
         // Dispatch a custom event so AuthContext can react without a circular import
         window.dispatchEvent(new CustomEvent('auth:logout'));
         return Promise.reject(refreshError);
