@@ -1052,11 +1052,30 @@ api.get("/document-requests", requireUser, async (req, res, next) => {
 
 api.put("/document-requests/:requestId/approve", requireUser, requireAction("documents", "approve"), async (req, res, next) => {
   try {
+    const requestDoc = await req.db.collection("document_requests").findOne(notDeleted({ id: req.params.requestId }), { projection: { _id: 0, additional_details: 1 } });
+    const portalRequestId = requestDoc?.additional_details?.portal_request_id;
+
     const result = await req.db.collection("document_requests").updateOne(
       notDeleted({ id: req.params.requestId }),
       { $set: { status: "approved", issue_date: now(), approved_by: req.user._id }, $push: { status_history: lifecycleEvent("approved", req.user._id) } }
     );
     if (!result.matchedCount) return bad(res, 404, "Document request not found");
+
+    // Sync portal tracking status after admin approval
+    if (portalRequestId) {
+      await req.db.collection("portal_requests").updateOne(
+        { id: portalRequestId },
+        {
+          $set: {
+            status: "approved",
+            approved_at: now(),
+            approved_by: req.user._id
+          },
+          $push: { status_history: lifecycleEvent("approved", req.user._id, "Document request approved") }
+        }
+      );
+    }
+
     res.json({ message: "Approved" });
   } catch (error) { next(error); }
 });
