@@ -40,6 +40,9 @@ export function setAuthCookies(res, accessToken, refreshToken) {
   const isProd = process.env.NODE_ENV === "production";
   const csrfToken = crypto.randomBytes(24).toString("base64url");
 
+  // Expose the CSRF token in a header for cross-domain frontends to read.
+  res.setHeader("x-csrf-token", csrfToken);
+
   // Use strict transport + sensible cookie defaults.
   res.cookie("access_token", accessToken, {
     httpOnly: true,

@@ -15,7 +15,7 @@ export function useConfirmAction() {
         if (!open) setOptions(null);
       }}
       title={options?.title || 'Confirm action'}
-      description={options?.description}
+      description={options?.description || ''}
       confirmLabel={options?.confirmLabel || 'Confirm'}
       cancelLabel={options?.cancelLabel || 'Cancel'}
       tone={options?.tone || 'danger'}
@@ -29,4 +29,3 @@ export function useConfirmAction() {
 
   return { confirm, confirmDialog };
 }
-

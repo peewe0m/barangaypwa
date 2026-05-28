@@ -46,10 +46,15 @@ app.use(cookieParser());
 
 app.use(cors({
   origin: (process.env.FRONTEND_URL || "https://barangaypwa-ytdq.vercel.app").split(",").map(o => o.trim().replace(/\/$/, "")),
-  credentials: true
+  credentials: true,
+  exposedHeaders: ["x-csrf-token"]
 }));
 
-app.use((req, _res, next) => {
+app.use((req, res, next) => {
+  const csrfToken = req.cookies?.csrf_token;
+  if (csrfToken) {
+    res.setHeader("x-csrf-token", csrfToken);
+  }
   req.db = app.locals.db;
   next();
 });
