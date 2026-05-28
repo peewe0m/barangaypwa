@@ -1,4 +1,5 @@
-import { MongoClient, ObjectId } from "mongodb";
+import mongodb from "mongodb";
+const { MongoClient, ObjectId } = mongodb;
 
 let client;
 let database;

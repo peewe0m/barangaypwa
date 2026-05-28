@@ -8,7 +8,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
-import { ObjectId } from "mongodb";
+import mongodb from "mongodb";
+const { ObjectId } = mongodb;
 import { connectDatabase, closeDatabase } from "./db.js";
 import { clearAuthCookies, createAccessToken, createRefreshToken, hashPassword, isAdminUser, requireAdmin, requireUser, setAuthCookies, verifyPassword } from "./auth.js";
 import { SYSTEM_CONFIG } from "./config/system.js";
@@ -44,7 +45,7 @@ app.use(cookieParser());
 
 
 app.use(cors({
-  origin: (process.env.FRONTEND_URL || "http://localhost:3000").split(","),
+  origin: (process.env.FRONTEND_URL || "https://barangaypwa-ytdq.vercel.app").split(",").map(o => o.trim().replace(/\/$/, "")),
   credentials: true
 }));
 
@@ -410,7 +411,7 @@ function assertProductionEnvironment() {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || process.env.JWT_SECRET === "change-this-long-random-secret") {
     throw new Error("Set a strong JWT_SECRET in production");
   }
-  const origins = (process.env.FRONTEND_URL || "").split(",").filter(Boolean);
+  const origins = (process.env.FRONTEND_URL || "").split(",").map(o => o.trim().replace(/\/$/, "")).filter(Boolean);
   if (origins.some((origin) => !origin.startsWith("https://"))) {
     throw new Error("FRONTEND_URL must use HTTPS in production");
   }
@@ -1930,7 +1931,7 @@ connectDatabase()
   .then(async (db) => {
     app.locals.db = db;
     await seedAdmin(db);
-    app.listen(port, () => console.log(`Node backend listening on http://localhost:${port}`));
+    app.listen(port, () => console.log(`Node backend listening. Frontend URL: ${process.env.FRONTEND_URL || "https://barangaypwa-ytdq.vercel.app"}`));
   })
   .catch((error) => {
     console.error("Failed to start backend", error);

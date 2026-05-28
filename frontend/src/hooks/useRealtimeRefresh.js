@@ -11,9 +11,10 @@ export function useRealtimeRefresh(refresh, enabled = true) {
   useEffect(() => {
     if (!enabled || typeof window === 'undefined' || !window.EventSource) return undefined;
 
-    const source = new EventSource(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.events}`, {
-      withCredentials: true,
-    });
+    // EventSource in browsers does NOT support `withCredentials`.
+    // Use Authorization header instead (we rely on the HttpOnly cookie being readable server-side).
+    // If your backend only checks cookies, this will still work only when credentials cookies are sent.
+    const source = new EventSource(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.events}`);
 
     const handleChange = () => {
       refreshRef.current?.();

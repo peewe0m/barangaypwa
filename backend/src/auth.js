@@ -44,7 +44,7 @@ export function setAuthCookies(res, accessToken, refreshToken) {
   res.cookie("access_token", accessToken, {
     httpOnly: true,
     secure: isProd,
-    sameSite: "strict",
+    sameSite: isProd ? "none" : "lax",
     maxAge: 15 * 60 * 1000,
     path: "/",
   });
@@ -52,7 +52,7 @@ export function setAuthCookies(res, accessToken, refreshToken) {
   res.cookie("refresh_token", refreshToken, {
     httpOnly: true,
     secure: isProd,
-    sameSite: "strict",
+    sameSite: isProd ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   });
@@ -61,7 +61,7 @@ export function setAuthCookies(res, accessToken, refreshToken) {
   res.cookie("auth_hint", "1", {
     httpOnly: false,
     secure: isProd,
-    sameSite: "strict",
+    sameSite: isProd ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   });
@@ -70,7 +70,7 @@ export function setAuthCookies(res, accessToken, refreshToken) {
   res.cookie("csrf_token", csrfToken, {
     httpOnly: false,
     secure: isProd,
-    sameSite: "strict",
+    sameSite: isProd ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   });
@@ -78,10 +78,12 @@ export function setAuthCookies(res, accessToken, refreshToken) {
 
 
 export function clearAuthCookies(res) {
-  res.clearCookie("access_token", { path: "/" });
-  res.clearCookie("refresh_token", { path: "/" });
-  res.clearCookie("auth_hint", { path: "/" });
-  res.clearCookie("csrf_token", { path: "/" });
+  const isProd = process.env.NODE_ENV === "production";
+  const options = { path: "/", secure: isProd, sameSite: isProd ? "none" : "lax" };
+  res.clearCookie("access_token", options);
+  res.clearCookie("refresh_token", options);
+  res.clearCookie("auth_hint", options);
+  res.clearCookie("csrf_token", options);
 }
 
 export async function requireUser(req, res, next) {
