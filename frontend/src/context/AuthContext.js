@@ -24,12 +24,6 @@ function formatApiErrorDetail(detail) {
   return String(detail);
 }
 
-function hasAuthHint() {
-  return document.cookie
-    .split(';')
-    .some((cookie) => cookie.trim().startsWith('auth_hint='));
-}
-
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,19 +31,15 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     checkAuth();
 
-    // Listen for the forced-logout event fired by the axios 401 interceptor
-    // when a token refresh fails (session truly expired).
-    const handleForcedLogout = () => { setUser(false); setLoading(false); };
+    const handleForcedLogout = () => {
+      setUser(false);
+      setLoading(false);
+    };
     window.addEventListener('auth:logout', handleForcedLogout);
     return () => window.removeEventListener('auth:logout', handleForcedLogout);
   }, []);
 
   const checkAuth = async () => {
-    // Always attempt /auth/me — the server is the source of truth.
-    // The auth_hint cookie is unreliable across origins and browser quirks,
-    // so we never short-circuit based on it alone.
-    }
-
     try {
       const { data } = await axios.get(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.me}`, {
         withCredentials: true,
