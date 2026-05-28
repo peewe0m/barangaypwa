@@ -64,8 +64,14 @@ function requireCsrf(req, res, next) {
   if (req.path === "/auth/login" || req.path.startsWith("/portal/")) return next();
   const cookieToken = req.cookies?.csrf_token;
   const headerToken = req.get("x-csrf-token");
+
   if (!cookieToken || !headerToken || cookieToken !== headerToken) {
-    return res.status(403).json({ detail: "Invalid CSRF token" });
+    console.warn(`[CSRF] Blocked ${req.method} ${req.path}. Reason:`, {
+      hasCookie: !!cookieToken,
+      hasHeader: !!headerToken,
+      match: cookieToken === headerToken
+    });
+    return bad(res, 403, "Security check failed. Please refresh the page and try again.");
   }
   next();
 }
