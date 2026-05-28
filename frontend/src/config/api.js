@@ -2,8 +2,12 @@ import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://barangaypwa.onrender.com';
 
-const csrfToken = () =>
-  document.cookie
+// In-memory fallback for when the csrf_token cookie hasn't propagated yet
+// (e.g. the very first POST fired right after login)
+let cachedCsrfToken = '';
+
+const getCsrfToken = () => {
+  const fromCookie = document.cookie
     .split(';')
     .map((cookie) => cookie.trim())
     .find((cookie) => cookie.startsWith('csrf_token='))
@@ -11,11 +15,86 @@ const csrfToken = () =>
     .slice(1)
     .join('=') || '';
 
+  if (fromCookie) {
+    cachedCsrfToken = decodeURIComponent(fromCookie);
+  }
+
+  return cachedCsrfToken;
+};
+
+// Cache the CSRF token from every response so it's available immediately
+// for the next request, even before the browser applies the Set-Cookie header.
+// Also handle 401 by attempting a silent token refresh before giving up.
+let isRefreshing = false;
+let refreshQueue = []; // { resolve, reject }
+
+function processRefreshQueue(error, token = null) {
+  refreshQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error);
+    else resolve(token);
+  });
+  refreshQueue = [];
+}
+
+axios.interceptors.response.use(
+  (response) => {
+    const token = response.headers?.['x-csrf-token'];
+    if (token) cachedCsrfToken = token;
+    return response;
+  },
+  async (error) => {
+    const token = error.response?.headers?.['x-csrf-token'];
+    if (token) cachedCsrfToken = token;
+
+    const originalRequest = error.config;
+    const is401 = error.response?.status === 401;
+    const isRefreshEndpoint = originalRequest?.url?.includes('/auth/refresh');
+    const isLoginEndpoint = originalRequest?.url?.includes('/auth/login');
+    const alreadyRetried = originalRequest?._retry;
+
+    // Attempt a silent token refresh on 401, but not for login/refresh endpoints
+    if (is401 && !alreadyRetried && !isRefreshEndpoint && !isLoginEndpoint) {
+      if (isRefreshing) {
+        // Queue this request until refresh completes
+        return new Promise((resolve, reject) => {
+          refreshQueue.push({ resolve, reject });
+        }).then(() => {
+          return axios(originalRequest);
+        }).catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        await axios.post(
+          `${BACKEND_URL}/api/auth/refresh`,
+          {},
+          { withCredentials: true }
+        );
+        processRefreshQueue(null);
+        return axios(originalRequest);
+      } catch (refreshError) {
+        processRefreshQueue(refreshError);
+        // Refresh failed — clear auth hint so the app knows the session is gone
+        document.cookie = 'auth_hint=; Max-Age=0; path=/';
+        // Dispatch a custom event so AuthContext can react without a circular import
+        window.dispatchEvent(new CustomEvent('auth:logout'));
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 axios.interceptors.request.use((config) => {
   const method = String(config.method || 'get').toLowerCase();
   if (['post', 'put', 'patch', 'delete'].includes(method)) {
     config.headers = config.headers || {};
-    config.headers['x-csrf-token'] = decodeURIComponent(csrfToken());
+    config.headers['x-csrf-token'] = getCsrfToken();
   }
   return config;
 });

@@ -8,9 +8,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
+import jwt from "jsonwebtoken";
 import mongodb from "mongodb";
 const { ObjectId } = mongodb;
-import { connectDatabase, closeDatabase } from "./db.js";
+import { connectDatabase, closeDatabase, toObjectId } from "./db.js";
 import { clearAuthCookies, createAccessToken, createRefreshToken, hashPassword, isAdminUser, requireAdmin, requireUser, setAuthCookies, verifyPassword } from "./auth.js";
 import { SYSTEM_CONFIG } from "./config/system.js";
 import { generateBarangayId, generateCertificate } from "./pdfGenerator.js";
@@ -61,7 +62,7 @@ app.use((req, res, next) => {
 
 function requireCsrf(req, res, next) {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
-  if (req.path === "/auth/login" || req.path.startsWith("/portal/")) return next();
+  if (req.path === "/auth/login" || req.path === "/auth/refresh" || req.path.startsWith("/portal/")) return next();
   const cookieToken = req.cookies?.csrf_token;
   const headerToken = req.get("x-csrf-token");
 
@@ -624,6 +625,33 @@ api.get("/auth/me", requireUser, (req, res) => res.json(publicUser(req.user)));
 api.post("/auth/logout", (_req, res) => {
   clearAuthCookies(res);
   res.json({ message: "Logged out successfully" });
+});
+
+api.post("/auth/refresh", async (req, res, next) => {
+  try {
+    const token = req.cookies?.refresh_token;
+    if (!token) return res.status(401).json({ detail: "No refresh token" });
+
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
+    } catch {
+      return res.status(401).json({ detail: "Invalid or expired refresh token" });
+    }
+
+    if (payload.type !== "refresh") return res.status(401).json({ detail: "Invalid token type" });
+
+    const user = await req.db.collection("users").findOne({ _id: toObjectId(payload.sub) });
+    if (!user || user.disabled || user.deleted_at) return res.status(401).json({ detail: "User not found or disabled" });
+
+    const newAccessToken = createAccessToken(String(user._id), user.email);
+    const newRefreshToken = createRefreshToken(String(user._id));
+    setAuthCookies(res, newAccessToken, newRefreshToken);
+
+    user._id = String(user._id);
+    delete user.password_hash;
+    res.json(publicUser(user));
+  } catch (error) { next(error); }
 });
 
 api.get("/modules", requireUser, (_req, res) => {

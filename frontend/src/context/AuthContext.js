@@ -36,6 +36,12 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkAuth();
+
+    // Listen for the forced-logout event fired by the axios 401 interceptor
+    // when a token refresh fails (session truly expired).
+    const handleForcedLogout = () => setUser(false);
+    window.addEventListener('auth:logout', handleForcedLogout);
+    return () => window.removeEventListener('auth:logout', handleForcedLogout);
   }, []);
 
   const checkAuth = async () => {
