@@ -10,10 +10,17 @@ import { toast } from 'sonner';
 import { Plus, Briefcase, RefreshCw, Trash2 } from 'lucide-react';
 import { PageLayout, PageHeader, EmptyState } from '../components/PageLayout';
 import API_CONFIG from '../config/api';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { useConfirmAction } from '../hooks/useConfirmAction';
+import { useAuth } from '../context/AuthContext';
+import { isAdminRole } from '../config/modules';
 
 const BUSINESS_TYPES = ['Retail', 'Service', 'Food & Beverage', 'Manufacturing', 'Wholesale', 'Other'];
 
 export const BusinessPage = () => {
+  const { user } = useAuth();
+  const adminUser = isAdminRole(user?.role);
+  const { confirm, confirmDialog } = useConfirmAction();
   const [businesses, setBusinesses] = useState([]);
   const [residents, setResidents] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -34,6 +41,8 @@ export const BusinessPage = () => {
       setResidents(r.data.residents || []);
     } catch { toast.error('Failed to load data'); }
   };
+
+  useRealtimeRefresh(fetchAll);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -59,18 +68,25 @@ export const BusinessPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this business?')) return;
-    try {
-      await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.businessById(id)}`, { withCredentials: true });
-      toast.success('Deleted');
-      fetchAll();
-    } catch { toast.error('Failed to delete'); }
+    confirm({
+      title: 'Delete business?',
+      description: 'This business record will be hidden from active views.',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.businessById(id)}`, { withCredentials: true });
+          toast.success('Deleted');
+          fetchAll();
+        } catch { toast.error('Failed to delete'); }
+      },
+    });
   };
 
   const isExpired = (expiry) => new Date(expiry) < new Date();
 
   return (
     <PageLayout testId="business-page">
+      {confirmDialog}
       <PageHeader
         title="Business Clearance"
         description="Manage business permits and renewals"
@@ -159,9 +175,11 @@ export const BusinessPage = () => {
                 <Button size="sm" variant="outline" onClick={() => handleRenew(b.id)} data-testid={`renew-business-${b.id}`} className="flex-1">
                   <RefreshCw size={14} className="mr-1" /> Renew
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => handleDelete(b.id)}>
-                  <Trash2 size={14} />
-                </Button>
+                {adminUser && (
+                  <Button size="sm" variant="ghost" onClick={() => handleDelete(b.id)}>
+                    <Trash2 size={14} />
+                  </Button>
+                )}
               </div>
             </Card>
           ))}

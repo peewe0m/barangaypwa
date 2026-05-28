@@ -11,8 +11,17 @@ import { Plus, DollarSign, Receipt, Trash2 } from 'lucide-react';
 import { PageLayout, PageHeader, EmptyState } from '../components/PageLayout';
 import API_CONFIG from '../config/api';
 import { SYSTEM_CONFIG } from '../config/system';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { useConfirmAction } from '../hooks/useConfirmAction';
+import { useAuth } from '../context/AuthContext';
+import { isAdminRole } from '../config/modules';
+
+const formatLabel = (value) => String(value || '').replace(/_/g, ' ');
 
 export const PaymentsPage = () => {
+  const { user } = useAuth();
+  const adminUser = isAdminRole(user?.role);
+  const { confirm, confirmDialog } = useConfirmAction();
   const [payments, setPayments] = useState([]);
   const [residents, setResidents] = useState([]);
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -33,6 +42,8 @@ export const PaymentsPage = () => {
     } catch { toast.error('Failed'); }
   };
 
+  useRealtimeRefresh(fetchAll);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -47,16 +58,23 @@ export const PaymentsPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete?')) return;
-    try {
-      await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.paymentById(id)}`, { withCredentials: true });
-      toast.success('Deleted');
-      fetchAll();
-    } catch { toast.error('Failed'); }
+    confirm({
+      title: 'Delete payment?',
+      description: 'This payment record will be hidden from active views.',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.paymentById(id)}`, { withCredentials: true });
+          toast.success('Deleted');
+          fetchAll();
+        } catch { toast.error('Failed'); }
+      },
+    });
   };
 
   return (
     <PageLayout testId="payments-page">
+      {confirmDialog}
       <PageHeader
         title="Payments & Collections"
         description="Manage payments and official receipts"
@@ -155,11 +173,25 @@ export const PaymentsPage = () => {
                 <tr key={p.id} className="hover:bg-accent/30">
                   <td className="px-6 py-4 font-mono text-xs flex items-center gap-2"><Receipt size={14} />{p.receipt_number}</td>
                   <td className="px-6 py-4">{p.resident_name || '—'}</td>
-                  <td className="px-6 py-4 text-sm capitalize">{p.payment_for?.replace('_', ' ')}</td>
-                  <td className="px-6 py-4 text-sm capitalize">{p.payment_method}</td>
+                  <td className="px-6 py-4 text-sm">
+                    <div className="font-medium capitalize">{p.service_availed || formatLabel(p.payment_for)}</div>
+                    {(p.document_number || p.tracking_number || p.purpose) && (
+                      <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                        {p.document_number && <p>Document #: {p.document_number}</p>}
+                        {p.tracking_number && <p>Tracking #: {p.tracking_number}</p>}
+                        {p.purpose && <p>Purpose: {p.purpose}</p>}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm capitalize">{formatLabel(p.payment_method)}</td>
                   <td className="px-6 py-4 text-right font-semibold text-primary">₱{(p.amount || 0).toLocaleString()}</td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</td>
-                  <td className="px-6 py-4"><Button size="sm" variant="ghost" onClick={() => handleDelete(p.id)}><Trash2 size={14} /></Button></td>
+                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                    <div>{new Date(p.created_at).toLocaleDateString()}</div>
+                    {p.last_downloaded_at && (
+                      <div className="mt-1 text-xs">Downloaded {p.download_count || 1}x</div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">{adminUser && <Button size="sm" variant="ghost" onClick={() => handleDelete(p.id)}><Trash2 size={14} /></Button>}</td>
                 </tr>
               ))}
             </tbody>

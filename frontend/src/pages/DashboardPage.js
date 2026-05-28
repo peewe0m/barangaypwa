@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
 import { SYSTEM_CONFIG } from '../config/system';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import {
   BarChart,
   Bar,
@@ -76,6 +77,8 @@ export const DashboardPage = () => {
     }
   };
 
+  useRealtimeRefresh(fetchStats);
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good Morning';
@@ -129,8 +132,8 @@ export const DashboardPage = () => {
             className="absolute inset-0 opacity-10"
             style={{
               backgroundImage:
-                'url(https://static.prod-images.emergentagent.com/jobs/c00e8b19-67ce-4ebd-a112-6d19f4b88df7/images/4a5456444474b057bd66bcd466c336e25090d0fdd7d5615cddd064b9385c00a8.png)',
-              backgroundSize: 'cover',
+                'linear-gradient(90deg, rgba(255,255,255,0.24) 1px, transparent 1px), linear-gradient(0deg, rgba(255,255,255,0.18) 1px, transparent 1px)',
+              backgroundSize: '28px 28px',
             }}
           />
           <div className="relative z-10 p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">

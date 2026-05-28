@@ -14,6 +14,7 @@ import {
   DollarSign,
   BarChart3,
   Settings,
+  Box,
   LogOut,
   Menu,
   X,
@@ -22,22 +23,24 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/button';
 import { SYSTEM_CONFIG } from '../config/system';
+import { hasModuleAccess } from '../config/modules';
 
 const menuItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/residents', label: 'Residents', icon: Users },
-  { path: '/households', label: 'Households', icon: HomeIcon },
-  { path: '/documents', label: 'Documents', icon: FileText },
-  { path: '/portal-requests', label: 'Online Requests', icon: Globe },
-  { path: '/business', label: 'Business', icon: Briefcase },
-  { path: '/blotter', label: 'Blotter', icon: AlertCircle },
-  { path: '/health', label: 'Health', icon: Heart },
-  { path: '/welfare', label: 'Social Welfare', icon: UserCheck },
-  { path: '/barangay-id', label: 'Barangay ID', icon: IdCard },
-  { path: '/appointments', label: 'Appointments', icon: Calendar },
-  { path: '/payments', label: 'Payments', icon: DollarSign },
-  { path: '/reports', label: 'Reports', icon: BarChart3 },
-  { path: '/settings', label: 'Settings', icon: Settings },
+  { key: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { key: 'residents', path: '/residents', label: 'Residents', icon: Users },
+  { key: 'households', path: '/households', label: 'Households', icon: HomeIcon },
+  { key: 'documents', path: '/documents', label: 'Documents', icon: FileText },
+  { key: 'portal_requests', path: '/portal-requests', label: 'Online Requests', icon: Globe },
+  { key: 'business', path: '/business', label: 'Business', icon: Briefcase },
+  { key: 'blotter', path: '/blotter', label: 'Blotter', icon: AlertCircle },
+  { key: 'health', path: '/health', label: 'Health', icon: Heart },
+  { key: 'medicine_inventory', path: '/medicine-inventory', label: 'Medicine Inventory', icon: Box },
+  { key: 'welfare', path: '/welfare', label: 'Social Welfare', icon: UserCheck },
+  { key: 'barangay_id', path: '/barangay-id', label: 'Barangay ID', icon: IdCard },
+  { key: 'appointments', path: '/appointments', label: 'Appointments', icon: Calendar },
+  { key: 'payments', path: '/payments', label: 'Payments', icon: DollarSign },
+  { key: 'reports', path: '/reports', label: 'Reports', icon: BarChart3 },
+  { key: 'settings', path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export const Sidebar = () => {
@@ -90,8 +93,8 @@ export const Sidebar = () => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto py-4">
-            {menuItems.map((item) => {
+          <nav className="flex-1 overflow-y-auto scrollbar-none py-4">
+            {menuItems.filter((item) => hasModuleAccess(user, item.key)).map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
               return (

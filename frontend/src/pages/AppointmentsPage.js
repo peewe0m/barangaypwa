@@ -10,6 +10,10 @@ import { toast } from 'sonner';
 import { Plus, Calendar, Clock, Trash2 } from 'lucide-react';
 import { PageLayout, PageHeader, EmptyState } from '../components/PageLayout';
 import API_CONFIG from '../config/api';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { useConfirmAction } from '../hooks/useConfirmAction';
+import { useAuth } from '../context/AuthContext';
+import { isAdminRole } from '../config/modules';
 
 const STATUS_COLORS = {
   scheduled: 'bg-blue-100 text-blue-800',
@@ -19,6 +23,9 @@ const STATUS_COLORS = {
 };
 
 export const AppointmentsPage = () => {
+  const { user } = useAuth();
+  const adminUser = isAdminRole(user?.role);
+  const { confirm, confirmDialog } = useConfirmAction();
   const [appointments, setAppointments] = useState([]);
   const [residents, setResidents] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -36,6 +43,8 @@ export const AppointmentsPage = () => {
       setResidents(r.data.residents || []);
     } catch { toast.error('Failed to load'); }
   };
+
+  useRealtimeRefresh(fetchAll);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -57,16 +66,23 @@ export const AppointmentsPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete?')) return;
-    try {
-      await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.appointmentById(id)}`, { withCredentials: true });
-      toast.success('Deleted');
-      fetchAll();
-    } catch { toast.error('Failed'); }
+    confirm({
+      title: 'Delete appointment?',
+      description: 'This appointment will be removed from the active schedule.',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.appointmentById(id)}`, { withCredentials: true });
+          toast.success('Deleted');
+          fetchAll();
+        } catch { toast.error('Failed'); }
+      },
+    });
   };
 
   return (
     <PageLayout testId="appointments-page">
+      {confirmDialog}
       <PageHeader
         title="Appointments"
         description="Schedule and manage barangay appointments"
@@ -148,7 +164,7 @@ export const AppointmentsPage = () => {
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button size="sm" variant="ghost" onClick={() => handleDelete(a.id)}><Trash2 size={14} /></Button>
+                {adminUser && <Button size="sm" variant="ghost" onClick={() => handleDelete(a.id)}><Trash2 size={14} /></Button>}
               </div>
             </Card>
           ))}

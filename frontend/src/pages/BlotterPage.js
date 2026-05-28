@@ -11,6 +11,10 @@ import { toast } from 'sonner';
 import { Plus, AlertCircle, Trash2 } from 'lucide-react';
 import { PageLayout, PageHeader, EmptyState } from '../components/PageLayout';
 import API_CONFIG from '../config/api';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { useConfirmAction } from '../hooks/useConfirmAction';
+import { useAuth } from '../context/AuthContext';
+import { isAdminRole } from '../config/modules';
 
 const STATUS_COLORS = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -22,6 +26,9 @@ const STATUS_COLORS = {
 const INCIDENT_TYPES = ['Noise Complaint', 'Property Dispute', 'Verbal Altercation', 'Physical Altercation', 'Theft', 'Domestic Issue', 'Public Disturbance', 'Other'];
 
 export const BlotterPage = () => {
+  const { user } = useAuth();
+  const adminUser = isAdminRole(user?.role);
+  const { confirm, confirmDialog } = useConfirmAction();
   const [blotters, setBlotters] = useState([]);
   const [residents, setResidents] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -43,6 +50,8 @@ export const BlotterPage = () => {
     } catch { toast.error('Failed to load data'); }
   };
 
+  useRealtimeRefresh(fetchAll);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -63,16 +72,23 @@ export const BlotterPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this blotter?')) return;
-    try {
-      await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.blotterById(id)}`, { withCredentials: true });
-      toast.success('Deleted');
-      fetchAll();
-    } catch { toast.error('Failed to delete'); }
+    confirm({
+      title: 'Delete blotter?',
+      description: 'This incident record will be hidden from active views.',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.blotterById(id)}`, { withCredentials: true });
+          toast.success('Deleted');
+          fetchAll();
+        } catch { toast.error('Failed to delete'); }
+      },
+    });
   };
 
   return (
     <PageLayout testId="blotter-page">
+      {confirmDialog}
       <PageHeader
         title="Blotter Management"
         description="Record and manage barangay incidents and complaints"
@@ -158,9 +174,11 @@ export const BlotterPage = () => {
                       <SelectItem value="closed">Closed</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button size="sm" variant="ghost" onClick={() => handleDelete(b.id)} data-testid={`delete-blotter-${b.id}`}>
-                    <Trash2 size={14} />
-                  </Button>
+                  {adminUser && (
+                    <Button size="sm" variant="ghost" onClick={() => handleDelete(b.id)} data-testid={`delete-blotter-${b.id}`}>
+                      <Trash2 size={14} />
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm mt-3">

@@ -9,8 +9,15 @@ import { toast } from 'sonner';
 import { Plus, IdCard, Download, Trash2, QrCode } from 'lucide-react';
 import { PageLayout, PageHeader, EmptyState } from '../components/PageLayout';
 import API_CONFIG from '../config/api';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { useConfirmAction } from '../hooks/useConfirmAction';
+import { useAuth } from '../context/AuthContext';
+import { isAdminRole } from '../config/modules';
 
 export const BarangayIDPage = () => {
+  const { user } = useAuth();
+  const adminUser = isAdminRole(user?.role);
+  const { confirm, confirmDialog } = useConfirmAction();
   const [ids, setIds] = useState([]);
   const [residents, setResidents] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -28,6 +35,8 @@ export const BarangayIDPage = () => {
       setResidents(r.data.residents || []);
     } catch { toast.error('Failed'); }
   };
+
+  useRealtimeRefresh(fetchAll);
 
   const handleGenerate = async () => {
     if (!selectedResident) return toast.error('Select a resident');
@@ -59,16 +68,23 @@ export const BarangayIDPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this ID?')) return;
-    try {
-      await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.barangayIdById(id)}`, { withCredentials: true });
-      toast.success('Deleted');
-      fetchAll();
-    } catch { toast.error('Failed'); }
+    confirm({
+      title: 'Delete barangay ID?',
+      description: 'This generated ID record will be hidden from active views.',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.barangayIdById(id)}`, { withCredentials: true });
+          toast.success('Deleted');
+          fetchAll();
+        } catch { toast.error('Failed'); }
+      },
+    });
   };
 
   return (
     <PageLayout testId="barangay-id-page">
+      {confirmDialog}
       <PageHeader
         title="Barangay ID System"
         description="Generate official Barangay ID cards with QR verification"
@@ -127,7 +143,7 @@ export const BarangayIDPage = () => {
                 <Button size="sm" variant="outline" onClick={() => handleDownload(id.id, id.id_number)} data-testid={`download-id-${id.id}`} className="flex-1">
                   <Download size={14} className="mr-1" /> Print ID
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => handleDelete(id.id)}><Trash2 size={14} /></Button>
+                {adminUser && <Button size="sm" variant="ghost" onClick={() => handleDelete(id.id)}><Trash2 size={14} /></Button>}
               </div>
             </Card>
           ))}

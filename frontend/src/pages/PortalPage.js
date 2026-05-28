@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { Checkbox } from '../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
-import { FileText, Search, CheckCircle2, Clock, Building2 } from 'lucide-react';
+import { Camera, FileText, RefreshCw, Search, CheckCircle2, Clock, Building2 } from 'lucide-react';
 import API_CONFIG from '../config/api';
 import { SYSTEM_CONFIG } from '../config/system';
 
@@ -20,14 +21,113 @@ export const PortalPage = () => {
   const [submitted, setSubmitted] = useState(null);
   const [trackingNumber, setTrackingNumber] = useState('');
   const [trackResult, setTrackResult] = useState(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [photoBlob, setPhotoBlob] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [cameraError, setCameraError] = useState('');
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const requiresPhoto = form.document_type === 'barangay_clearance';
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraActive(false);
+  };
+
+  useEffect(() => () => stopCamera(), []);
+
+  useEffect(() => {
+    if (!cameraActive || !videoRef.current || !streamRef.current) return;
+
+    videoRef.current.srcObject = streamRef.current;
+    videoRef.current.play().catch(() => {
+      setCameraError('Camera opened, but the preview could not start. Please try again.');
+    });
+  }, [cameraActive]);
+
+  useEffect(() => {
+    if (!requiresPhoto) {
+      stopCamera();
+      setPhotoBlob(null);
+      setPhotoPreview('');
+      setCameraError('');
+    }
+  }, [requiresPhoto]);
+
+  const startCamera = async () => {
+    setCameraError('');
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera capture is not supported in this browser. Please use Chrome, Edge, or another modern browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraActive(true);
+    } catch {
+      setCameraError('Camera access was blocked or unavailable. Please allow camera permission and try again.');
+    }
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const sourceWidth = video.videoWidth || 1280;
+    const sourceHeight = video.videoHeight || 720;
+    const cropSize = Math.min(sourceWidth, sourceHeight);
+    const cropX = Math.max(0, (sourceWidth - cropSize) / 2);
+    const cropY = Math.max(0, (sourceHeight - cropSize) / 2);
+    canvas.width = 900;
+    canvas.height = 900;
+    const context = canvas.getContext('2d');
+    context.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      setPhotoBlob(blob);
+      setPhotoPreview(URL.createObjectURL(blob));
+      stopCamera();
+    }, 'image/jpeg', 0.92);
+  };
+
+  const retakePhoto = () => {
+    setPhotoBlob(null);
+    setPhotoPreview('');
+    startCamera();
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (requiresPhoto && !photoBlob) {
+      toast.error('Please capture your photo before submitting a Barangay Clearance request');
+      return;
+    }
+    if (!privacyAccepted) {
+      toast.error('Please acknowledge the privacy notice and portal terms before submitting');
+      return;
+    }
+
     try {
-      const { data } = await axios.post(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.portalRequest}`, form);
+      const payload = new FormData();
+      Object.entries(form).forEach(([key, value]) => payload.append(key, value));
+      if (photoBlob) payload.append('photo', photoBlob, 'barangay-clearance-photo.jpg');
+
+      const { data } = await axios.post(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.portalRequest}`, payload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       setSubmitted(data);
+      setPhotoBlob(null);
+      setPhotoPreview('');
+      setPrivacyAccepted(false);
+      stopCamera();
       toast.success('Request submitted!');
-    } catch { toast.error('Failed to submit request'); }
+    } catch (error) { toast.error(error.response?.data?.detail || 'Failed to submit request'); }
   };
 
   const handleTrack = async (e) => {
@@ -53,8 +153,9 @@ export const PortalPage = () => {
         <div
           className="absolute inset-0 opacity-15"
           style={{
-            backgroundImage: 'url(https://static.prod-images.emergentagent.com/jobs/c00e8b19-67ce-4ebd-a112-6d19f4b88df7/images/4a5456444474b057bd66bcd466c336e25090d0fdd7d5615cddd064b9385c00a8.png)',
-            backgroundSize: 'cover',
+            backgroundImage:
+              'linear-gradient(90deg, rgba(255,255,255,0.22) 1px, transparent 1px), linear-gradient(0deg, rgba(255,255,255,0.16) 1px, transparent 1px)',
+            backgroundSize: '30px 30px',
           }}
         />
         <div className="relative z-10 max-w-5xl mx-auto px-4 py-12 md:py-20">
@@ -111,6 +212,7 @@ export const PortalPage = () => {
               <Card className="p-6 md:p-8" data-testid="portal-request-form">
                 <h2 className="text-2xl font-heading font-bold mb-2">Submit Document Request</h2>
                 <p className="text-muted-foreground mb-6">Fill out the form below and we'll process your request.</p>
+                <PortalPrivacyNotice />
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
@@ -118,8 +220,8 @@ export const PortalPage = () => {
                       <Input data-testid="portal-fullname-input" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
                     </div>
                     <div>
-                      <Label>Email *</Label>
-                      <Input type="email" data-testid="portal-email-input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+                      <Label>Email</Label>
+                      <Input type="email" data-testid="portal-email-input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                     </div>
                     <div>
                       <Label>Contact Number *</Label>
@@ -143,6 +245,69 @@ export const PortalPage = () => {
                     <div>
                       <Label>Purpose *</Label>
                       <Input data-testid="portal-purpose-input" value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} required placeholder="e.g. Employment, School..." />
+                    </div>
+                    {requiresPhoto && (
+                      <div className="md:col-span-2 rounded-lg border border-border bg-accent/40 p-4" data-testid="clearance-photo-capture">
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <div>
+                            <Label>Applicant Photo *</Label>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              For a formal result: face the camera directly, use a plain well-lit background, remove hats or sunglasses, keep your full face visible, and hold still before capture.
+                            </p>
+                          </div>
+                          {!cameraActive && !photoPreview && (
+                            <Button type="button" onClick={startCamera} className="bg-primary hover:bg-primary/90 hover:text-white" data-testid="start-camera-button">
+                              <Camera size={16} className="mr-2" /> Open Camera
+                            </Button>
+                          )}
+                        </div>
+
+                        <div className="mt-4 overflow-hidden rounded-md border border-border bg-background">
+                          {cameraActive && (
+                            <div className="space-y-3 p-3">
+                              <video ref={videoRef} autoPlay playsInline muted className="aspect-square w-full rounded-md bg-black object-cover object-center" />
+                              <div className="flex gap-2">
+                                <Button type="button" onClick={capturePhoto} className="bg-primary hover:bg-primary/90 hover:text-white" data-testid="capture-photo-button">
+                                  Capture Photo
+                                </Button>
+                                <Button type="button" variant="outline" onClick={stopCamera}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          {photoPreview && (
+                            <div className="space-y-3 p-3">
+                              <img src={photoPreview} alt="Captured applicant" className="aspect-square w-full rounded-md object-cover object-center" />
+                              <Button type="button" variant="outline" onClick={retakePhoto} data-testid="retake-photo-button">
+                                <RefreshCw size={16} className="mr-2" /> Retake Photo
+                              </Button>
+                            </div>
+                          )}
+
+                          {!cameraActive && !photoPreview && (
+                            <div className="flex min-h-44 items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                              Camera photo is required for Barangay Clearance.
+                            </div>
+                          )}
+                        </div>
+                        <canvas ref={canvasRef} className="hidden" />
+                        {cameraError && <p className="mt-3 text-sm text-red-600">{cameraError}</p>}
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-md border border-border bg-background p-4">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="portal-privacy-accepted"
+                        checked={privacyAccepted}
+                        onCheckedChange={(checked) => setPrivacyAccepted(Boolean(checked))}
+                        data-testid="portal-privacy-checkbox"
+                      />
+                      <Label htmlFor="portal-privacy-accepted" className="text-sm font-normal leading-5">
+                        I confirm that the information I provided is true and I have read and understood the privacy notice and portal terms.
+                      </Label>
                     </div>
                   </div>
                   <Button type="submit" data-testid="portal-submit-button" className="w-full bg-primary hover:bg-primary/90 hover:text-white">
@@ -211,3 +376,30 @@ export const PortalPage = () => {
     </div>
   );
 };
+
+const PortalPrivacyNotice = () => (
+  <div className="mb-6 rounded-md border border-border bg-accent/40 p-4 text-sm" data-testid="portal-privacy-notice">
+    <h3 className="font-heading font-semibold text-primary">Privacy Notice and Portal Terms</h3>
+    <div className="mt-3 grid gap-3 text-muted-foreground md:grid-cols-2">
+      <div>
+        <p className="font-medium text-foreground">Data we collect</p>
+        <p className="mt-1">Name, contact number, address, requested document, purpose, request status, optional email, and photo when required for Barangay Clearance.</p>
+      </div>
+      <div>
+        <p className="font-medium text-foreground">Why we use it</p>
+        <p className="mt-1">To verify, process, approve, release, and audit barangay document requests.</p>
+      </div>
+      <div>
+        <p className="font-medium text-foreground">Retention and access</p>
+        <p className="mt-1">Records are kept only for approved barangay purposes and accessed by authorized staff based on assigned duties.</p>
+      </div>
+      <div>
+        <p className="font-medium text-foreground">Your responsibilities</p>
+        <p className="mt-1">Submit accurate information, keep your tracking number private, and bring valid identification when claiming documents.</p>
+      </div>
+    </div>
+    <p className="mt-3 text-muted-foreground">
+      You may contact {SYSTEM_CONFIG.barangayInfo.email} or {SYSTEM_CONFIG.barangayInfo.contactNumber} for privacy questions, correction requests, or concerns about your portal request.
+    </p>
+  </div>
+);

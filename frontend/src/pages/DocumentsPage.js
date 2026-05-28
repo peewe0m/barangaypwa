@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { Plus, Download, CheckCircle } from 'lucide-react';
 import API_CONFIG from '../config/api';
 import { SYSTEM_CONFIG } from '../config/system';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 export const DocumentsPage = () => {
   const [requests, setRequests] = useState([]);
@@ -66,6 +67,11 @@ export const DocumentsPage = () => {
       console.error('Failed to load residents');
     }
   };
+
+  useRealtimeRefresh(() => {
+    fetchRequests();
+    fetchResidents();
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -1,26 +1,52 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { Sidebar } from '../components/Sidebar';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card } from '../components/ui/card';
+import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Search, Edit, Trash2, Camera, User } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Camera, User, Home, Phone, Users } from 'lucide-react';
 import API_CONFIG from '../config/api';
 import { SYSTEM_CONFIG } from '../config/system';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { useConfirmAction } from '../hooks/useConfirmAction';
+import { useAuth } from '../context/AuthContext';
+import { isAdminRole } from '../config/modules';
+
+// Photos are private; render must use authenticated backend proxy routes.
+// We deliberately do NOT resolve to /uploads/<key> since uploads are private.
+const resolvePhotoUrl = (resident) => {
+  const privateUrl = API_CONFIG.privateFileURL(resident?.photo_storage);
+  if (privateUrl) return privateUrl;
+  // Backward compatibility: if backend already provides a full URL, allow it.
+  // Otherwise, fall back to empty string (no direct public URL).
+  const photoUrl = resident?.photo_url;
+  if (!photoUrl) return '';
+  if (/^https?:\/\//i.test(photoUrl)) return photoUrl;
+  return '';
+};
+
 
 const EMPTY_FORM = {
   full_name: '', address: '', birthdate: '', gender: 'Male', civil_status: 'Single',
   citizenship: 'Filipino', contact_number: '', occupation: '', email: '',
   religion: 'Roman Catholic', is_voter: false, is_pwd: false, is_senior: false,
-  is_solo_parent: false, emergency_contact: '',
+  is_solo_parent: false, household_id: '', household_name: '', family_group: '',
+  family_role: 'Member', relationship_to_head: '', emergency_contact: '',
+  emergency_contact_name: '', emergency_contact_relationship: '',
+  emergency_contact_number: '', emergency_contact_address: '',
 };
 
 export const ResidentsPage = () => {
+  const { user } = useAuth();
+  const adminUser = isAdminRole(user?.role);
+  const { confirm, confirmDialog } = useConfirmAction();
   const [residents, setResidents] = useState([]);
+  const [households, setHouseholds] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -28,14 +54,22 @@ export const ResidentsPage = () => {
   const fileInputRef = useRef(null);
   const [uploadingFor, setUploadingFor] = useState(null);
 
-  useEffect(() => { fetchResidents(); }, [searchQuery]);
-
-  const fetchResidents = async () => {
+  const fetchResidents = useCallback(async () => {
     try {
       const params = searchQuery ? { search: searchQuery } : {};
       const { data } = await axios.get(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.residents}`, { params, withCredentials: true });
       setResidents(data.residents || []);
     } catch { toast.error('Failed to load residents'); }
+  }, [searchQuery]);
+
+  useEffect(() => { fetchResidents(); }, [fetchResidents]);
+  useEffect(() => { fetchHouseholds(); }, []);
+
+  const fetchHouseholds = async () => {
+    try {
+      const { data } = await axios.get(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.households}`, { withCredentials: true });
+      setHouseholds(data.households || []);
+    } catch { toast.error('Failed to load households'); }
   };
 
   const openCreate = () => {
@@ -53,7 +87,16 @@ export const ResidentsPage = () => {
       contact_number: resident.contact_number || '',
       occupation: resident.occupation || '',
       religion: resident.religion || 'Roman Catholic',
+      household_id: resident.household_id || '',
+      household_name: resident.household_name || '',
+      family_group: resident.family_group || '',
+      family_role: resident.family_role || 'Member',
+      relationship_to_head: resident.relationship_to_head || '',
       emergency_contact: resident.emergency_contact || '',
+      emergency_contact_name: resident.emergency_contact_name || '',
+      emergency_contact_relationship: resident.emergency_contact_relationship || '',
+      emergency_contact_number: resident.emergency_contact_number || '',
+      emergency_contact_address: resident.emergency_contact_address || '',
     });
     setDialogOpen(true);
   };
@@ -76,12 +119,18 @@ export const ResidentsPage = () => {
   };
 
   const handleDelete = async (residentId) => {
-    if (!window.confirm('Delete this resident?')) return;
-    try {
-      await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.residentById(residentId)}`, { withCredentials: true });
-      toast.success('Resident deleted');
-      fetchResidents();
-    } catch { toast.error('Failed to delete'); }
+    confirm({
+      title: 'Delete resident?',
+      description: 'This hides the resident record from normal views. Admin audit history remains available.',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.residentById(residentId)}`, { withCredentials: true });
+          toast.success('Resident deleted');
+          fetchResidents();
+        } catch { toast.error('Failed to delete'); }
+      },
+    });
   };
 
   const handlePhotoUpload = async (residentId, file) => {
@@ -112,6 +161,8 @@ export const ResidentsPage = () => {
     e.target.value = '';
   };
 
+  useRealtimeRefresh(fetchResidents);
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
@@ -121,7 +172,7 @@ export const ResidentsPage = () => {
         <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-4xl font-heading font-bold text-primary">Residents</h1>
-            <p className="text-muted-foreground mt-2">Manage barangay residents</p>
+            <p className="text-muted-foreground mt-2">Manage household grouping, family members, and emergency contacts</p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
@@ -132,7 +183,7 @@ export const ResidentsPage = () => {
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{editingId ? 'Edit Resident' : 'Add New Resident'}</DialogTitle></DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <Label>Full Name *</Label>
                     <Input data-testid="resident-fullname-input" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
@@ -184,6 +235,63 @@ export const ResidentsPage = () => {
                     <label className="flex items-center gap-2"><input type="checkbox" data-testid="resident-senior-checkbox" checked={form.is_senior} onChange={(e) => setForm({ ...form, is_senior: e.target.checked })} className="rounded" /><span className="text-sm">Senior Citizen</span></label>
                     <label className="flex items-center gap-2"><input type="checkbox" data-testid="resident-solo-parent-checkbox" checked={form.is_solo_parent} onChange={(e) => setForm({ ...form, is_solo_parent: e.target.checked })} className="rounded" /><span className="text-sm">Solo Parent</span></label>
                   </div>
+                  <div className="col-span-2 border-t border-border pt-4">
+                    <h3 className="font-semibold flex items-center gap-2"><Home size={16} /> Household Grouping</h3>
+                  </div>
+                  <div>
+                    <Label>Household</Label>
+                    <Select value={form.household_id || 'none'} onValueChange={(v) => setForm({ ...form, household_id: v === 'none' ? '' : v })}>
+                      <SelectTrigger data-testid="resident-household-select"><SelectValue placeholder="Select household" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No household</SelectItem>
+                        {households.map((h) => (
+                          <SelectItem key={h.id} value={h.id}>{h.household_record_number || h.household_head_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Family Group</Label>
+                    <Input value={form.family_group} onChange={(e) => setForm({ ...form, family_group: e.target.value })} placeholder="e.g. Reyes Family" />
+                  </div>
+                  <div>
+                    <Label>Family Role</Label>
+                    <Select value={form.family_role} onValueChange={(v) => setForm({ ...form, family_role: v })}>
+                      <SelectTrigger data-testid="resident-family-role-select"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {['Head', 'Spouse', 'Child', 'Parent', 'Sibling', 'Relative', 'Boarder', 'Member'].map((role) => (
+                          <SelectItem key={role} value={role}>{role}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Relationship to Head</Label>
+                    <Input value={form.relationship_to_head} onChange={(e) => setForm({ ...form, relationship_to_head: e.target.value })} placeholder="e.g. Daughter" />
+                  </div>
+                  <div className="col-span-2 border-t border-border pt-4">
+                    <h3 className="font-semibold flex items-center gap-2"><Phone size={16} /> Emergency Contact</h3>
+                  </div>
+                  <div>
+                    <Label>Contact Name</Label>
+                    <Input data-testid="resident-emergency-name-input" value={form.emergency_contact_name} onChange={(e) => setForm({ ...form, emergency_contact_name: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Relationship</Label>
+                    <Input value={form.emergency_contact_relationship} onChange={(e) => setForm({ ...form, emergency_contact_relationship: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Contact Number</Label>
+                    <Input value={form.emergency_contact_number} onChange={(e) => setForm({ ...form, emergency_contact_number: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Contact Address</Label>
+                    <Input value={form.emergency_contact_address} onChange={(e) => setForm({ ...form, emergency_contact_address: e.target.value })} />
+                  </div>
+                  <div className="col-span-2">
+                    <Label>Emergency Notes</Label>
+                    <Textarea value={form.emergency_contact} onChange={(e) => setForm({ ...form, emergency_contact: e.target.value })} placeholder="Additional details for quick response" />
+                  </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
@@ -211,6 +319,7 @@ export const ResidentsPage = () => {
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Photo</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Address</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Household</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Age</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Gender</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Status</th>
@@ -222,8 +331,8 @@ export const ResidentsPage = () => {
                   <tr key={resident.id} className="hover:bg-accent/50" data-testid={`resident-row-${resident.id}`}>
                     <td className="px-6 py-3">
                       <button onClick={() => triggerUpload(resident.id)} className="relative group" data-testid={`upload-photo-${resident.id}`}>
-                        {resident.photo_url ? (
-                          <img src={`${API_CONFIG.uploadsURL.replace('/uploads', '')}${resident.photo_url}`} alt={resident.full_name}
+                        {resolvePhotoUrl(resident) ? (
+                          <img src={resolvePhotoUrl(resident)} alt={resident.full_name}
                                className="w-10 h-10 rounded-full object-cover border-2 border-primary/20" />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center">
@@ -242,6 +351,24 @@ export const ResidentsPage = () => {
                     </td>
                     <td className="px-6 py-4 font-medium">{resident.full_name}</td>
                     <td className="px-6 py-4 text-sm text-muted-foreground max-w-xs truncate">{resident.address}</td>
+                    <td className="px-6 py-4 text-sm">
+                      <div className="space-y-1 min-w-44">
+                        <div className="flex items-center gap-1 font-medium">
+                          <Users size={13} className="text-muted-foreground" />
+                          {resident.household_name || resident.family_group || 'Ungrouped'}
+                        </div>
+                        {(resident.family_role || resident.relationship_to_head) && (
+                          <div className="text-xs text-muted-foreground">
+                            {[resident.family_role, resident.relationship_to_head].filter(Boolean).join(' / ')}
+                          </div>
+                        )}
+                        {(resident.emergency_contact_name || resident.emergency_contact_number) && (
+                          <div className="text-xs text-muted-foreground">
+                            Emergency: {[resident.emergency_contact_name, resident.emergency_contact_number].filter(Boolean).join(' - ')}
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-sm">{resident.age}</td>
                     <td className="px-6 py-4 text-sm">{resident.gender}</td>
                     <td className="px-6 py-4 text-sm">
@@ -257,9 +384,11 @@ export const ResidentsPage = () => {
                         <Button size="sm" variant="outline" data-testid={`edit-resident-${resident.id}`} onClick={() => openEdit(resident)}>
                           <Edit size={14} />
                         </Button>
-                        <Button size="sm" variant="outline" data-testid={`delete-resident-${resident.id}`} onClick={() => handleDelete(resident.id)}>
-                          <Trash2 size={14} />
-                        </Button>
+                        {adminUser && (
+                          <Button size="sm" variant="outline" data-testid={`delete-resident-${resident.id}`} onClick={() => handleDelete(resident.id)}>
+                            <Trash2 size={14} />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -272,6 +401,7 @@ export const ResidentsPage = () => {
           </div>
         </Card>
       </main>
+      {confirmDialog}
     </div>
   );
 };

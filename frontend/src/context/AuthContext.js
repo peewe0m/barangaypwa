@@ -24,6 +24,12 @@ function formatApiErrorDetail(detail) {
   return String(detail);
 }
 
+function hasAuthHint() {
+  return document.cookie
+    .split(';')
+    .some((cookie) => cookie.trim().startsWith('auth_hint='));
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +39,12 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkAuth = async () => {
+    if (!hasAuthHint()) {
+      setUser(false);
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data } = await axios.get(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.me}`, {
         withCredentials: true,
@@ -60,6 +72,10 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const refreshUser = async () => {
+    await checkAuth();
+  };
+
   const register = async (email, password, full_name, role) => {
     try {
       const { data } = await axios.post(
@@ -67,7 +83,6 @@ export const AuthProvider = ({ children }) => {
         { email, password, full_name, role },
         { withCredentials: true }
       );
-      setUser(data);
       return { success: true };
     } catch (error) {
       const message = formatApiErrorDetail(error.response?.data?.detail) || error.message;
@@ -85,7 +100,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

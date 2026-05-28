@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Download, BarChart3, Users, DollarSign } from 'lucide-react';
 import { PageLayout, PageHeader } from '../components/PageLayout';
 import API_CONFIG from '../config/api';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -28,6 +29,8 @@ export const ReportsPage = () => {
       setFinancialReport(f.data);
     } catch { toast.error('Failed to load reports'); }
   };
+
+  useRealtimeRefresh(fetchReports);
 
   const exportResidentPDF = () => {
     if (!residentReport) return;

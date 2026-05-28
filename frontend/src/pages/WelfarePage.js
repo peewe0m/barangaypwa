@@ -11,6 +11,10 @@ import { toast } from 'sonner';
 import { Plus, UserCheck, Trash2 } from 'lucide-react';
 import { PageLayout, PageHeader, EmptyState } from '../components/PageLayout';
 import API_CONFIG from '../config/api';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { useConfirmAction } from '../hooks/useConfirmAction';
+import { useAuth } from '../context/AuthContext';
+import { isAdminRole } from '../config/modules';
 
 const PROGRAMS = [
   { value: 'senior', label: 'Senior Citizens' },
@@ -22,6 +26,9 @@ const PROGRAMS = [
 const ASSISTANCE_TYPES = ['Cash Assistance', 'Food Pack', 'Medical', 'Educational', 'Burial', 'Calamity', 'Other'];
 
 export const WelfarePage = () => {
+  const { user } = useAuth();
+  const adminUser = isAdminRole(user?.role);
+  const { confirm, confirmDialog } = useConfirmAction();
   const [records, setRecords] = useState([]);
   const [residents, setResidents] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -44,6 +51,8 @@ export const WelfarePage = () => {
     } catch { toast.error('Failed to load data'); }
   };
 
+  useRealtimeRefresh(fetchAll);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -58,18 +67,25 @@ export const WelfarePage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete?')) return;
-    try {
-      await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.welfareRecordById(id)}`, { withCredentials: true });
-      toast.success('Deleted');
-      fetchAll();
-    } catch { toast.error('Failed'); }
+    confirm({
+      title: 'Delete welfare record?',
+      description: 'This welfare record will be hidden from active views.',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.welfareRecordById(id)}`, { withCredentials: true });
+          toast.success('Deleted');
+          fetchAll();
+        } catch { toast.error('Failed'); }
+      },
+    });
   };
 
   const filtered = records.filter((r) => r.program_type === activeTab);
 
   return (
     <PageLayout testId="welfare-page">
+      {confirmDialog}
       <PageHeader
         title="Social Welfare"
         description="Manage assistance programs and beneficiaries"
@@ -166,7 +182,7 @@ export const WelfarePage = () => {
                         <td className="px-6 py-4 text-right font-semibold text-primary">₱{(r.amount || 0).toLocaleString()}</td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">{r.date}</td>
                         <td className="px-6 py-4">
-                          <Button size="sm" variant="ghost" onClick={() => handleDelete(r.id)}><Trash2 size={14} /></Button>
+                          {adminUser && <Button size="sm" variant="ghost" onClick={() => handleDelete(r.id)}><Trash2 size={14} /></Button>}
                         </td>
                       </tr>
                     ))}

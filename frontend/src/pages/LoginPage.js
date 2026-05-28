@@ -35,7 +35,8 @@ export const LoginPage = () => {
     <div
       className="min-h-screen flex items-center justify-center p-4"
       style={{
-        backgroundImage: 'url(https://static.prod-images.emergentagent.com/jobs/c00e8b19-67ce-4ebd-a112-6d19f4b88df7/images/14b337acdd5b98ec92cfe3b255a1e62b3554dc69e32cdb3388dea4964ace04c1.png)',
+        backgroundImage:
+          'linear-gradient(135deg, hsl(153, 40%, 22%) 0%, hsl(158, 35%, 34%) 45%, hsl(43, 58%, 50%) 100%)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
