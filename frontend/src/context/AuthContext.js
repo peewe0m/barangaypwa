@@ -39,7 +39,7 @@ export const AuthProvider = ({ children }) => {
 
     // Listen for the forced-logout event fired by the axios 401 interceptor
     // when a token refresh fails (session truly expired).
-    const handleForcedLogout = () => setUser(false);
+    const handleForcedLogout = () => { setUser(false); setLoading(false); };
     window.addEventListener('auth:logout', handleForcedLogout);
     return () => window.removeEventListener('auth:logout', handleForcedLogout);
   }, []);
