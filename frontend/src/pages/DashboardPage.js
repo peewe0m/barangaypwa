@@ -20,6 +20,9 @@ import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
 import { SYSTEM_CONFIG } from '../config/system';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { OrganicLoader } from '../components/Loading/OrganicLoader';
+import { ORGANIC_GREEN } from '../components/charts/chartTheme';
+
 import {
   BarChart,
   Bar,
@@ -34,7 +37,8 @@ import {
   Cell,
 } from 'recharts';
 
-const COLORS = ['#2d6a4f', '#52b788', '#95d5b2', '#d8f3dc'];
+const COLORS = ORGANIC_GREEN.palette;
+
 
 export const DashboardPage = () => {
   const { user } = useAuth();
@@ -92,15 +96,18 @@ export const DashboardPage = () => {
         <Sidebar />
         <div className="flex-1 lg:ml-64 p-8">
           <div className="text-center py-20">
-            <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-primary border-r-transparent"></div>
-            <p className="mt-4 text-muted-foreground">Loading dashboard...</p>
+            <div className="mx-auto">
+              <OrganicLoader title="Loading dashboard..." />
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
+
   const demographicData = [
+
     { name: 'PWD', value: stats?.total_pwd || 0 },
     { name: 'Senior Citizens', value: stats?.total_senior || 0 },
     { name: 'Solo Parents', value: stats?.total_solo_parent || 0 },
@@ -222,12 +229,12 @@ export const DashboardPage = () => {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={(entry) => `${entry.name}: ${entry.value}`}
-                    outerRadius={100}
-                    fill="#8884d8"
+                    label={(entry) => `${entry.name}`}
+                    outerRadius={106}
                     dataKey="value"
-                    animationDuration={1000}
+                    animationDuration={900}
                   >
+
                     {demographicData.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
@@ -251,7 +258,9 @@ export const DashboardPage = () => {
             </h3>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={requestData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.8} />
+
+                
                 <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
                 <YAxis stroke="hsl(var(--muted-foreground))" />
                 <Tooltip

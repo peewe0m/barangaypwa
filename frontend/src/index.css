@@ -54,7 +54,7 @@
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.3);
   }
-  
+
   .sidebar-glass {
     background: rgba(45, 106, 79, 0.95);
     backdrop-filter: blur(10px);
@@ -69,4 +69,27 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+
+  /* Organic green shimmer (for loading skeleton blocks) */
+  .organic-shimmer {
+    background: linear-gradient(90deg, rgba(45,106,79,0.08) 0%, rgba(82,183,136,0.18) 50%, rgba(45,106,79,0.08) 100%);
+    background-size: 200% 100%;
+    animation: organic-shimmer 1.1s ease-in-out infinite;
+  }
+
+  @keyframes organic-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Fade/slide for chart appearance */
+  .chart-enter {
+    animation: chart-enter 360ms ease-out both;
+  }
+
+  @keyframes chart-enter {
+    from { opacity: 0; transform: translateY(6px) scale(0.99); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
 }
+

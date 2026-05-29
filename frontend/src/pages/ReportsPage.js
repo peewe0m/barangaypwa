@@ -7,27 +7,52 @@ import { Download, BarChart3, Users, DollarSign } from 'lucide-react';
 import { PageLayout, PageHeader } from '../components/PageLayout';
 import API_CONFIG from '../config/api';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const COLORS = ['#2d6a4f', '#52b788', '#95d5b2', '#d8f3dc'];
+import { ORGANIC_GREEN } from '../components/charts/chartTheme';
+
+const COLORS = ORGANIC_GREEN.palette;
 
 export const ReportsPage = () => {
   const [residentReport, setResidentReport] = useState(null);
   const [financialReport, setFinancialReport] = useState(null);
 
-  useEffect(() => { fetchReports(); }, []);
+  useEffect(() => {
+    fetchReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchReports = async () => {
     try {
       const [r, f] = await Promise.all([
-        axios.get(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.residentReport}`, { withCredentials: true }),
-        axios.get(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.financialReport}`, { withCredentials: true }),
+        axios.get(
+          `${API_CONFIG.baseURL}${API_CONFIG.endpoints.residentReport}`,
+          { withCredentials: true }
+        ),
+        axios.get(
+          `${API_CONFIG.baseURL}${API_CONFIG.endpoints.financialReport}`,
+          { withCredentials: true }
+        ),
       ]);
       setResidentReport(r.data);
       setFinancialReport(f.data);
-    } catch { toast.error('Failed to load reports'); }
+    } catch {
+      toast.error('Failed to load reports');
+    }
   };
 
   useRealtimeRefresh(fetchReports);
@@ -75,7 +100,10 @@ export const ReportsPage = () => {
       body: [
         ['Total Revenue', `PHP ${financialReport.total_revenue.toLocaleString()}`],
         ['Transactions', financialReport.transaction_count],
-        ...Object.entries(financialReport.by_type || {}).map(([k, v]) => [k.replace('_', ' '), `PHP ${v.toLocaleString()}`]),
+        ...Object.entries(financialReport.by_type || {}).map(([k, v]) => [
+          k.replace('_', ' '),
+          `PHP ${v.toLocaleString()}`,
+        ]),
       ],
       theme: 'striped',
       headStyles: { fillColor: [45, 106, 79] },
@@ -85,22 +113,44 @@ export const ReportsPage = () => {
   };
 
   const exportCSV = (data, filename) => {
-    const rows = Object.entries(data).filter(([_, v]) => typeof v !== 'object').map(([k, v]) => `${k},${v}`);
+    const rows = Object.entries(data)
+      .filter(([_, v]) => typeof v !== 'object')
+      .map(([k, v]) => `${k},${v}`);
     const csv = ['Field,Value', ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = filename;
+    a.href = url;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('CSV exported');
   };
 
-  const ageGroupData = residentReport ? Object.entries(residentReport.age_groups).map(([k, v]) => ({ name: k, value: v })) : [];
-  const genderData = residentReport ? [
-    { name: 'Male', value: residentReport.male },
-    { name: 'Female', value: residentReport.female },
-  ].filter((d) => d.value > 0) : [];
+  const ageGroupData = residentReport
+    ? Object.entries(residentReport.age_groups).map(([k, v]) => ({
+        name: k,
+        value: v,
+      }))
+    : [];
+
+  const genderData = residentReport
+    ? [
+        { name: 'Male', value: residentReport.male },
+        { name: 'Female', value: residentReport.female },
+      ].filter((d) => d.value > 0)
+    : [];
+
+  const chartTooltipProps = {
+    contentStyle: {
+      background: ORGANIC_GREEN.tooltipBg,
+      border: `1px solid ${ORGANIC_GREEN.tooltipBorder}`,
+      borderRadius: '0.75rem',
+      padding: '10px 12px',
+      color: ORGANIC_GREEN.tooltipText,
+    },
+    itemStyle: { color: ORGANIC_GREEN.primary },
+  };
 
   return (
     <PageLayout testId="reports-page">
@@ -115,36 +165,62 @@ export const ReportsPage = () => {
               <h3 className="text-lg font-heading font-semibold">Resident Demographics</h3>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={exportResidentPDF} data-testid="export-resident-pdf">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={exportResidentPDF}
+                data-testid="export-resident-pdf"
+              >
                 <Download size={14} className="mr-1" /> PDF
               </Button>
-              <Button size="sm" variant="outline" onClick={() => exportCSV(residentReport || {}, 'residents.csv')}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => exportCSV(residentReport || {}, 'residents.csv')}
+              >
                 <Download size={14} className="mr-1" /> CSV
               </Button>
             </div>
           </div>
+
           {residentReport && (
             <>
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div className="p-3 bg-accent rounded-lg">
                   <p className="text-xs text-muted-foreground">Total</p>
-                  <p className="text-2xl font-heading font-bold text-primary">{residentReport.total}</p>
+                  <p className="text-2xl font-heading font-bold text-primary">
+                    {residentReport.total}
+                  </p>
                 </div>
                 <div className="p-3 bg-accent rounded-lg">
                   <p className="text-xs text-muted-foreground">Voters</p>
-                  <p className="text-2xl font-heading font-bold text-primary">{residentReport.voters}</p>
+                  <p className="text-2xl font-heading font-bold text-primary">
+                    {residentReport.voters}
+                  </p>
                 </div>
               </div>
+
               {ageGroupData.length > 0 && (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={ageGroupData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#2d6a4f" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="chart-enter">
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={ageGroupData}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke={ORGANIC_GREEN.grid}
+                        opacity={0.9}
+                      />
+                      <XAxis dataKey="name" stroke={ORGANIC_GREEN.axis} tick={{ fill: ORGANIC_GREEN.axis }} />
+                      <YAxis stroke={ORGANIC_GREEN.axis} tick={{ fill: ORGANIC_GREEN.axis }} />
+                      <Tooltip {...chartTooltipProps} />
+                      <Bar
+                        dataKey="value"
+                        fill={ORGANIC_GREEN.primary}
+                        radius={[10, 10, 0, 0]}
+                        animationDuration={900}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               )}
             </>
           )}
@@ -158,36 +234,59 @@ export const ReportsPage = () => {
               <h3 className="text-lg font-heading font-semibold">Financial Summary</h3>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={exportFinancialPDF} data-testid="export-financial-pdf">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={exportFinancialPDF}
+                data-testid="export-financial-pdf"
+              >
                 <Download size={14} className="mr-1" /> PDF
               </Button>
-              <Button size="sm" variant="outline" onClick={() => exportCSV(financialReport || {}, 'financial.csv')}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => exportCSV(financialReport || {}, 'financial.csv')}
+              >
                 <Download size={14} className="mr-1" /> CSV
               </Button>
             </div>
           </div>
+
           {financialReport && (
             <>
               <div className="p-4 bg-primary text-white rounded-lg mb-4">
                 <p className="text-xs text-white/80 uppercase">Total Revenue</p>
-                <p className="text-3xl font-heading font-bold mt-1">₱{financialReport.total_revenue.toLocaleString()}</p>
-                <p className="text-xs text-white/80 mt-1">{financialReport.transaction_count} transactions</p>
+                <p className="text-3xl font-heading font-bold mt-1">
+                  ₱{financialReport.total_revenue.toLocaleString()}
+                </p>
+                <p className="text-xs text-white/80 mt-1">
+                  {financialReport.transaction_count} transactions
+                </p>
               </div>
+
               {Object.keys(financialReport.by_type || {}).length > 0 && (
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={Object.entries(financialReport.by_type).map(([k, v]) => ({ name: k, value: v }))}
-                      cx="50%" cy="50%" outerRadius={70} fill="#2d6a4f" dataKey="value"
-                      label={(e) => `${e.name}: ₱${e.value}`}
-                    >
-                      {Object.keys(financialReport.by_type).map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div className="chart-enter">
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={Object.entries(financialReport.by_type).map(([k, v]) => ({
+                          name: k,
+                          value: v,
+                        }))}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={70}
+                        dataKey="value"
+                        label={(e) => `${e.name}`}
+                      >
+                        {Object.keys(financialReport.by_type).map((_, i) => (
+                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip {...chartTooltipProps} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               )}
             </>
           )}
@@ -200,19 +299,31 @@ export const ReportsPage = () => {
               <BarChart3 className="text-primary" size={20} />
               Gender Distribution
             </h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={genderData} cx="50%" cy="50%" outerRadius={90} fill="#2d6a4f" dataKey="value"
-                     label={(e) => `${e.name}: ${e.value}`}>
-                  {genderData.map((_, i) => (<Cell key={i} fill={COLORS[i % COLORS.length]} />))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+
+            <div className="chart-enter">
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={genderData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    dataKey="value"
+                    label={(e) => `${e.name}`}
+                  >
+                    {genderData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip {...chartTooltipProps} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </Card>
         )}
       </div>
     </PageLayout>
   );
 };
+
