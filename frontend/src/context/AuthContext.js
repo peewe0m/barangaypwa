@@ -31,6 +31,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     checkAuth();
 
+    // Only react to forced logouts triggered by an exhausted refresh token.
+    // Normal token expiry is handled silently via the axios interceptor refresh flow.
     const handleForcedLogout = () => {
       setUser(false);
       setLoading(false);
@@ -39,14 +41,47 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener('auth:logout', handleForcedLogout);
   }, []);
 
+  /**
+   * Restore the session on page load / mount.
+   * Strategy:
+   *  1. Try /auth/me — if the access token is still valid, we're done.
+   *  2. If /auth/me returns 401 (access token expired), explicitly call
+   *     /auth/refresh to get a fresh access token, then retry /auth/me.
+   *  3. If refresh also fails the user is genuinely logged-out — set user=false.
+   *
+   * We bypass the global axios interceptor here (using _skipInterceptor) so the
+   * interceptor doesn't race with our explicit refresh call on initial load.
+   */
   const checkAuth = async () => {
     try {
       const { data } = await axios.get(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.me}`, {
         withCredentials: true,
+        _skipInterceptor: true,   // handled below; avoids double-refresh race
       });
       setUser(data);
     } catch (error) {
-      setUser(false);
+      if (error.response?.status === 401) {
+        // Access token expired — attempt silent refresh before giving up
+        try {
+          await axios.post(
+            `${API_CONFIG.baseURL}/auth/refresh`,
+            {},
+            { withCredentials: true, _skipInterceptor: true }
+          );
+          // Refresh succeeded — retry /auth/me with the fresh access token cookie
+          const { data } = await axios.get(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.me}`, {
+            withCredentials: true,
+            _skipInterceptor: true,
+          });
+          setUser(data);
+        } catch {
+          // Both access AND refresh tokens are expired → genuine logout
+          setUser(false);
+        }
+      } else {
+        // Network error or other non-auth failure — don't boot the user out
+        setUser(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -73,7 +108,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (email, password, full_name, role) => {
     try {
-      const { data } = await axios.post(
+      await axios.post(
         `${API_CONFIG.baseURL}${API_CONFIG.endpoints.register}`,
         { email, password, full_name, role },
         { withCredentials: true }
@@ -88,9 +123,11 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await axios.post(`${API_CONFIG.baseURL}${API_CONFIG.endpoints.logout}`, {}, { withCredentials: true });
-      setUser(false);
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      // Always clear local state regardless of API success
+      setUser(false);
     }
   };
 

@@ -47,6 +47,13 @@ axios.interceptors.response.use(
     if (token) cachedCsrfToken = token;
 
     const originalRequest = error.config;
+
+    // Allow certain calls (e.g. checkAuth on mount) to bypass this interceptor
+    // so they can handle refresh logic themselves without a race condition.
+    if (originalRequest?._skipInterceptor) {
+      return Promise.reject(error);
+    }
+
     const is401 = error.response?.status === 401;
     const isRefreshEndpoint = originalRequest?.url?.includes('/auth/refresh');
     const isLoginEndpoint = originalRequest?.url?.includes('/auth/login');
@@ -76,10 +83,9 @@ axios.interceptors.response.use(
         return axios(originalRequest);
       } catch (refreshError) {
         processRefreshQueue(refreshError);
-        // Refresh failed — clear auth hint so the app knows the session is gone
+        // Refresh failed — the session is truly gone. Clear auth hint and notify the app.
         const isProd = window.location.protocol === 'https:';
         document.cookie = `auth_hint=; Max-Age=0; path=/; SameSite=${isProd ? 'None' : 'Lax'}${isProd ? '; Secure' : ''}`;
-        // Dispatch a custom event so AuthContext can react without a circular import
         window.dispatchEvent(new CustomEvent('auth:logout'));
         return Promise.reject(refreshError);
       } finally {
@@ -191,7 +197,6 @@ export const API_CONFIG = {
     portalRequests: '/portal-requests',
     processPortalRequest: (id) => `/portal-requests/${id}/process`,
     linkPortalRequestToDocument: (id) => `/portal-requests/${id}/link-document`,
-
 
     // Seed
     seedData: '/seed/sample-data',
