@@ -1174,14 +1174,24 @@ api.get("/document-requests/:requestId/download", requireUser, requireAction("do
 // Mark document as claimed by the requestor — removes it from the "For Release" queue.
 api.put("/document-requests/:requestId/claim", requireUser, async (req, res, next) => {
   try {
-    const result = await req.db.collection("document_requests").updateOne(
+    const docReq = await req.db.collection("document_requests").findOne(
       notDeleted({ id: req.params.requestId, status: "released" }),
+      { projection: { _id: 0, additional_details: 1 } }
+    );
+    if (!docReq) return bad(res, 404, "Document not found or not yet released");
+
+    await req.db.collection("document_requests").updateOne(
+      { id: req.params.requestId },
       {
         $set: { status: "claimed", claimed_at: now(), claimed_by: req.user._id },
         $push: { status_history: lifecycleEvent("claimed", req.user._id, "Document claimed by requestor") }
       }
     );
-    if (!result.matchedCount) return bad(res, 404, "Document not found or not yet released");
+
+    // Sync kiosk queue: claimed → dissolves from the For Release section on the monitor
+    const portalReqId = docReq.additional_details?.portal_request_id;
+    await syncQueueTicket(req.db, portalReqId, "claimed");
+
     await auditLog(req, "claim_document", { collection: "document_requests", record_id: req.params.requestId });
     res.json({ message: "Claimed" });
   } catch (error) { next(error); }
@@ -2135,4 +2145,3 @@ process.on("SIGINT", async () => {
   await closeDatabase();
   process.exit(0);
 });
-
