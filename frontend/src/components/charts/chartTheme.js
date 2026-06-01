@@ -1,24 +1,22 @@
-// Dark neon chart theme matching the dashboard's visual style
+// Dark neon chart theme — graph colors stay neon, backgrounds blend with organic green
 export const NEON_DARK = {
-  // Neon gradient palette for bar charts (teal/cyan gradient feel)
   barColor: {
     start: '#00e5ff',
     mid: '#00bcd4',
     end: '#006064',
   },
-  // Pie chart palette — distinct neon segments on dark background
   pieColors: ['#00e5ff', '#7c4dff', '#ea80fc', '#ff6d00', '#69f0ae'],
   axis: 'rgba(255,255,255,0.45)',
   grid: 'rgba(255,255,255,0.06)',
-  tooltipBg: 'rgba(10, 14, 40, 0.95)',
-  tooltipBorder: 'rgba(0, 229, 255, 0.3)',
-  tooltipText: '#e0f7fa',
-  background: 'linear-gradient(160deg, #0a0e28 0%, #0d1b2a 100%)',
-  cardBg: 'rgba(13, 27, 42, 0.95)',
-  totalLabel: '#00e5ff',
+  tooltipBg: 'rgba(18, 42, 30, 0.97)',
+  tooltipBorder: 'rgba(82, 183, 136, 0.4)',
+  tooltipText: '#d8f3dc',
+  // Card background blends dark green → deep forest (organic green family)
+  background: 'linear-gradient(160deg, #0d2218 0%, #112b1e 60%, #0a1f16 100%)',
+  cardBg: 'rgba(13, 34, 24, 0.97)',
+  totalLabel: '#52b788',
 };
 
-// Legacy organic green kept for backward compatibility
 export const ORGANIC_GREEN = {
   palette: ['#2d6a4f', '#52b788', '#95d5b2', '#d8f3dc'],
   axis: 'hsl(var(--muted-foreground))',
@@ -30,10 +28,10 @@ export const ORGANIC_GREEN = {
 };
 
 export const chartCardStyle = {
-  background: NEON_DARK.cardBg,
-  border: `1px solid rgba(0,229,255,0.15)`,
+  background: NEON_DARK.background,
+  border: `1px solid rgba(82, 183, 136, 0.2)`,
   borderRadius: '1rem',
-  boxShadow: '0 8px 32px rgba(0,229,255,0.06), 0 2px 12px rgba(0,0,0,0.4)',
+  boxShadow: '0 8px 32px rgba(45,106,79,0.18), 0 2px 12px rgba(0,0,0,0.4)',
   color: NEON_DARK.tooltipText,
 };
 
@@ -43,7 +41,7 @@ export const tooltipStyle = {
   borderRadius: '0.75rem',
   padding: '10px 14px',
   color: NEON_DARK.tooltipText,
-  boxShadow: '0 4px 20px rgba(0,229,255,0.15)',
+  boxShadow: '0 4px 20px rgba(45,106,79,0.25)',
 };
 
 export const makePieLabel = ({ formatter }) =>

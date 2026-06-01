@@ -123,14 +123,14 @@ const darkTooltipStyle = {
   borderRadius: '0.6rem',
   color: NEON_DARK.tooltipText,
   fontSize: 12,
-  boxShadow: `0 4px 20px rgba(0,229,255,0.15)`,
+  boxShadow: `0 4px 20px rgba(45,106,79,0.25)`,
 };
 
 const chartCardBase = {
   background: NEON_DARK.background,
-  border: '1px solid rgba(0,229,255,0.12)',
+  border: '1px solid rgba(82,183,136,0.2)',
   borderRadius: '1rem',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+  boxShadow: '0 8px 32px rgba(45,106,79,0.18), 0 2px 12px rgba(0,0,0,0.4)',
 };
 
 // ─── Main component ──────────────────────────────────────────────────────────
