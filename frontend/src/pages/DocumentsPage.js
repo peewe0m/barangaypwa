@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Download, CheckCircle } from 'lucide-react';
+import { Plus, Download, CheckCircle, PackageCheck, HandshakeIcon } from 'lucide-react';
 import API_CONFIG from '../config/api';
 import { SYSTEM_CONFIG } from '../config/system';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
@@ -30,6 +30,8 @@ export const DocumentsPage = () => {
   const [residents, setResidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  // Track rows that are dissolving (claimed but not yet removed from DOM)
+  const [dissolving, setDissolving] = useState(new Set());
   const [formData, setFormData] = useState({
     resident_id: '',
     document_type: 'barangay_clearance',
@@ -104,26 +106,46 @@ export const DocumentsPage = () => {
     }
   };
 
-  const handleDownload = async (requestId, docType) => {
+  const handleDownload = async (requestId, docType, docNumber) => {
     try {
       const response = await axios.get(
         `${API_CONFIG.baseURL}${API_CONFIG.endpoints.downloadDocument(requestId)}`,
-        {
-          withCredentials: true,
-          responseType: 'blob',
-        }
+        { withCredentials: true, responseType: 'blob' }
       );
-      
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${docType}_${requestId}.pdf`);
+      link.setAttribute('download', `${docType}_${docNumber || requestId}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      toast.success('Document downloaded');
+      toast.success('Document downloaded — hand it to the requestor, then click Claimed');
+      fetchRequests();
     } catch (error) {
       toast.error('Failed to download document');
+    }
+  };
+
+  const handleClaim = async (requestId) => {
+    try {
+      await axios.put(
+        `${API_CONFIG.baseURL}${API_CONFIG.endpoints.claimDocument(requestId)}`,
+        {},
+        { withCredentials: true }
+      );
+      // Start dissolve animation, then remove from list after it finishes
+      setDissolving((prev) => new Set([...prev, requestId]));
+      setTimeout(() => {
+        setRequests((prev) => prev.filter((r) => r.id !== requestId));
+        setDissolving((prev) => {
+          const next = new Set(prev);
+          next.delete(requestId);
+          return next;
+        });
+      }, 600);
+      toast.success('Document marked as claimed — request complete');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to mark as claimed');
     }
   };
 
@@ -141,17 +163,33 @@ export const DocumentsPage = () => {
     return resident ? resident.full_name : 'Unknown';
   };
 
+  // Split requests into buckets
+  const forRelease = requests.filter((r) => r.status === 'released');
+  const active = requests.filter((r) => !['released', 'claimed'].includes(r.status));
+  const claimed = requests.filter((r) => r.status === 'claimed');
+
+  const statusBadge = (status) => {
+    const map = {
+      pending:  'bg-yellow-100 text-yellow-700',
+      approved: 'bg-blue-100 text-blue-700',
+      released: 'bg-purple-100 text-purple-700',
+      rejected: 'bg-red-100 text-red-700',
+      claimed:  'bg-green-100 text-green-700',
+    };
+    return map[status] || 'bg-gray-100 text-gray-600';
+  };
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
-      
+
       <main className="flex-1 lg:ml-64 p-4 md:p-8" data-testid="documents-page">
         <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-4xl font-heading font-bold text-primary">Document Requests</h1>
             <p className="text-muted-foreground mt-2">Manage barangay document requests</p>
           </div>
-          
+
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="create-document-request-button" className="bg-primary hover:bg-primary/90 hover:text-white">
@@ -228,7 +266,88 @@ export const DocumentsPage = () => {
           </Dialog>
         </div>
 
-        {/* Document Requests Table */}
+        {/* ── FOR RELEASE section ───────────────────────────────────────── */}
+        {forRelease.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-3">
+              <PackageCheck size={18} className="text-purple-600" />
+              <h2 className="text-lg font-semibold text-purple-700">For Release</h2>
+              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700">
+                {forRelease.length}
+              </span>
+              <span className="text-xs text-muted-foreground">— PDF printed, hand to requestor then click Claimed</span>
+            </div>
+
+            <Card className="overflow-hidden border-purple-200">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-purple-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Document #</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Resident</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Type</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Purpose</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Released At</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-purple-700 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-purple-100">
+                    {forRelease.map((request) => (
+                      <tr
+                        key={request.id}
+                        data-testid={`release-row-${request.id}`}
+                        style={{
+                          transition: 'opacity 0.5s ease, transform 0.5s ease, max-height 0.5s ease',
+                          opacity: dissolving.has(request.id) ? 0 : 1,
+                          transform: dissolving.has(request.id) ? 'translateX(40px)' : 'translateX(0)',
+                        }}
+                        className="bg-purple-50/40 hover:bg-purple-50"
+                      >
+                        <td className="px-6 py-4 font-medium text-sm">{request.document_number}</td>
+                        <td className="px-6 py-4 text-sm font-medium">{getResidentName(request.resident_id)}</td>
+                        <td className="px-6 py-4 text-sm">{request.document_type?.replace(/_/g, ' ')}</td>
+                        <td className="px-6 py-4 text-sm text-muted-foreground">{request.purpose}</td>
+                        <td className="px-6 py-4 text-sm text-muted-foreground">
+                          {request.downloaded_at ? new Date(request.downloaded_at).toLocaleString() : '—'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              data-testid={`redownload-document-${request.id}`}
+                              onClick={() => handleDownload(request.id, request.document_type, request.document_number)}
+                              className="text-xs"
+                            >
+                              <Download size={13} className="mr-1" /> Re-print
+                            </Button>
+                            <Button
+                              size="sm"
+                              data-testid={`claim-document-${request.id}`}
+                              onClick={() => handleClaim(request.id)}
+                              className="bg-green-600 hover:bg-green-700 text-white gap-1 text-xs"
+                              disabled={dissolving.has(request.id)}
+                            >
+                              <HandshakeIcon size={13} /> Claimed
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── ACTIVE REQUESTS table ─────────────────────────────────────── */}
+        <div className="mb-2 flex items-center gap-2">
+          <h2 className="text-base font-semibold text-foreground">All Requests</h2>
+          {claimed.length > 0 && (
+            <span className="text-xs text-muted-foreground">· {claimed.length} claimed (hidden)</span>
+          )}
+        </div>
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full" data-testid="documents-table">
@@ -244,21 +363,15 @@ export const DocumentsPage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {requests.map((request) => (
+                {active.map((request) => (
                   <tr key={request.id} className="hover:bg-accent/50" data-testid={`document-row-${request.id}`}>
                     <td className="px-6 py-4 font-medium text-sm">{request.document_number}</td>
                     <td className="px-6 py-4 text-sm">{getResidentName(request.resident_id)}</td>
-                    <td className="px-6 py-4 text-sm">
-                      {request.document_type?.replace(/_/g, ' ')}
-                    </td>
+                    <td className="px-6 py-4 text-sm">{request.document_type?.replace(/_/g, ' ')}</td>
                     <td className="px-6 py-4 text-sm text-muted-foreground">{request.purpose}</td>
                     <td className="px-6 py-4">
                       <span
-                        className={`px-3 py-1 text-xs rounded-full ${
-                          request.status === 'approved'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}
+                        className={`px-3 py-1 text-xs rounded-full capitalize ${statusBadge(request.status)}`}
                         data-testid={`document-status-${request.id}`}
                       >
                         {request.status}
@@ -276,8 +389,7 @@ export const DocumentsPage = () => {
                             onClick={() => handleApprove(request.id)}
                             className="bg-primary hover:bg-primary/90 hover:text-white"
                           >
-                            <CheckCircle size={14} className="mr-1" />
-                            Approve
+                            <CheckCircle size={14} className="mr-1" /> Approve
                           </Button>
                         )}
                         {request.status === 'approved' && (
@@ -285,10 +397,9 @@ export const DocumentsPage = () => {
                             size="sm"
                             variant="outline"
                             data-testid={`download-document-${request.id}`}
-                            onClick={() => handleDownload(request.id, request.document_type)}
+                            onClick={() => handleDownload(request.id, request.document_type, request.document_number)}
                           >
-                            <Download size={14} className="mr-1" />
-                            Download
+                            <Download size={14} className="mr-1" /> Download
                           </Button>
                         )}
                       </div>
@@ -297,9 +408,9 @@ export const DocumentsPage = () => {
                 ))}
               </tbody>
             </table>
-            {requests.length === 0 && (
+            {active.length === 0 && !loading && (
               <div className="text-center py-12 text-muted-foreground" data-testid="no-documents-message">
-                No document requests found
+                No active document requests
               </div>
             )}
           </div>

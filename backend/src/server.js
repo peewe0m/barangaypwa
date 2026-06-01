@@ -1153,7 +1153,11 @@ api.get("/document-requests/:requestId/download", requireUser, requireAction("do
     const saved = await uploadLargeObject(`documents/${docReq.id}.pdf`, pdf, "application/pdf");
     await req.db.collection("document_requests").updateOne(
       { id: docReq.id },
-      { $set: { pdf_url: saved.url, pdf_storage: saved, downloaded_at: now() }, $inc: { download_count: 1 }, $push: { status_history: lifecycleEvent("released", req.user._id, "PDF downloaded") } }
+      {
+        $set: { status: "released", pdf_url: saved.url, pdf_storage: saved, downloaded_at: now() },
+        $inc: { download_count: 1 },
+        $push: { status_history: lifecycleEvent("released", req.user._id, "PDF downloaded — for release to requestor") }
+      }
     );
     await recordDocumentPayment(req.db, { resident, document: docReq, downloadedBy: req.user._id });
     await auditLog(req, "download_pdf", { collection: "document_requests", record_id: docReq.id, document_type: docReq.document_type, document_number: docReq.document_number });
@@ -1164,6 +1168,22 @@ api.get("/document-requests/:requestId/download", requireUser, requireAction("do
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename=${docReq.document_type}_${docReq.document_number}.pdf`);
     res.send(pdf);
+  } catch (error) { next(error); }
+});
+
+// Mark document as claimed by the requestor — removes it from the "For Release" queue.
+api.put("/document-requests/:requestId/claim", requireUser, async (req, res, next) => {
+  try {
+    const result = await req.db.collection("document_requests").updateOne(
+      notDeleted({ id: req.params.requestId, status: "released" }),
+      {
+        $set: { status: "claimed", claimed_at: now(), claimed_by: req.user._id },
+        $push: { status_history: lifecycleEvent("claimed", req.user._id, "Document claimed by requestor") }
+      }
+    );
+    if (!result.matchedCount) return bad(res, 404, "Document not found or not yet released");
+    await auditLog(req, "claim_document", { collection: "document_requests", record_id: req.params.requestId });
+    res.json({ message: "Claimed" });
   } catch (error) { next(error); }
 });
 
