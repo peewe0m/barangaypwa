@@ -1143,7 +1143,7 @@ api.get("/document-requests/:requestId/download", requireUser, requireAction("do
   try {
     const docReq = await req.db.collection("document_requests").findOne(notDeleted({ id: req.params.requestId }));
     if (!docReq) return bad(res, 404, "Document request not found");
-    if (docReq.status !== "approved") return bad(res, 400, "Document not yet approved");
+    if (!["approved", "released"].includes(docReq.status)) return bad(res, 400, "Document not yet approved");
     const resident = await req.db.collection("residents").findOne(notDeleted({ id: docReq.resident_id }), { projection: { _id: 0 } });
     if (!resident) return bad(res, 404, "Resident not found");
     const templateBuffer = await getDocumentTemplateBuffer(req.db, docReq.document_type);
@@ -1812,7 +1812,7 @@ api.get("/portal/track/:trackingNumber/download", async (req, res, next) => {
 
     const docReq = await req.db.collection("document_requests").findOne(notDeleted({ id: portalReq.document_request_id }));
     if (!docReq) return bad(res, 404, "Document request not found");
-    if (docReq.status !== "approved") return bad(res, 400, "Document not yet approved");
+    if (!["approved", "released"].includes(docReq.status)) return bad(res, 400, "Document not yet approved");
 
     const resident = await req.db.collection("residents").findOne(notDeleted({ id: docReq.resident_id }), { projection: { _id: 0 } });
     if (!resident) return bad(res, 404, "Resident not found");
@@ -2135,3 +2135,4 @@ process.on("SIGINT", async () => {
   await closeDatabase();
   process.exit(0);
 });
+
