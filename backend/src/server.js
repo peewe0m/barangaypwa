@@ -90,6 +90,48 @@ function publishDataChange(payload) {
   }
 }
 
+/**
+ * Sync the kiosk queue_ticket status whenever the PWA admin takes an action
+ * on a portal request or its linked document request.
+ *
+ * Queue status mapping:
+ *   PWA admin clicks "Proceed"       → queue: now_serving
+ *   PWA admin clicks "Link Document" → queue: processing
+ *   PWA admin clicks "Approve"       → queue: processing  (stays, document being prepared)
+ *   PDF downloaded / released        → queue: done
+ *   Rejected                         → queue: cancelled
+ *
+ * Lookup: portal_requests stores queue_ticket_id (set by the kiosk on creation).
+ * Falls back to tracking_number match if queue_ticket_id is absent (older records).
+ */
+async function syncQueueTicket(db, portalRequestId, queueStatus) {
+  if (!portalRequestId) return;
+  try {
+    const portalReq = await db.collection("portal_requests").findOne({ id: portalRequestId });
+    if (!portalReq) return;
+
+    const ticketFilter = portalReq.queue_ticket_id
+      ? { id: portalReq.queue_ticket_id }
+      : { tracking_number: portalReq.tracking_number };
+
+    // If moving to now_serving, demote any existing now_serving ticket first
+    if (queueStatus === "now_serving") {
+      await db.collection("queue_tickets").updateMany(
+        { status: "now_serving", ...ticketFilter.$or ? {} : { id: { $ne: portalReq.queue_ticket_id || "__none__" } } },
+        { $set: { status: "processing", updated_at: new Date() } }
+      );
+    }
+
+    await db.collection("queue_tickets").updateOne(
+      ticketFilter,
+      { $set: { status: queueStatus, updated_at: new Date(), pwa_synced: true } }
+    );
+  } catch (err) {
+    // Non-fatal: queue sync failure should never break the main action
+    console.warn("[syncQueueTicket] Failed to sync queue ticket:", err.message);
+  }
+}
+
 api.get("/events", requireUser, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -1074,6 +1116,8 @@ api.put("/document-requests/:requestId/approve", requireUser, requireAction("doc
           $push: { status_history: lifecycleEvent("approved", req.user._id, "Document request approved") }
         }
       );
+      // Sync kiosk queue: document approved → stays in "Processing" (being printed/prepared)
+      await syncQueueTicket(req.db, portalRequestId, "processing");
     }
 
     res.json({ message: "Approved" });
@@ -1082,11 +1126,15 @@ api.put("/document-requests/:requestId/approve", requireUser, requireAction("doc
 
 api.put("/document-requests/:requestId/reject", requireUser, requireAction("documents", "approve"), async (req, res, next) => {
   try {
+    const docReq = await req.db.collection("document_requests").findOne(notDeleted({ id: req.params.requestId }), { projection: { _id: 0, additional_details: 1 } });
     const result = await req.db.collection("document_requests").updateOne(
       notDeleted({ id: req.params.requestId }),
       { $set: { status: "rejected", rejected_by: req.user._id, rejected_at: now() }, $push: { status_history: lifecycleEvent("rejected", req.user._id, req.body.reason || "") } }
     );
     if (!result.matchedCount) return bad(res, 404, "Document request not found");
+    // Sync kiosk queue: document rejected → ticket cancelled
+    const portalReqId = docReq?.additional_details?.portal_request_id;
+    await syncQueueTicket(req.db, portalReqId, "cancelled");
     res.json({ message: "Rejected" });
   } catch (error) { next(error); }
 });
@@ -1109,6 +1157,9 @@ api.get("/document-requests/:requestId/download", requireUser, requireAction("do
     );
     await recordDocumentPayment(req.db, { resident, document: docReq, downloadedBy: req.user._id });
     await auditLog(req, "download_pdf", { collection: "document_requests", record_id: docReq.id, document_type: docReq.document_type, document_number: docReq.document_number });
+    // Sync kiosk queue: document released/downloaded → ticket moves to "Done"
+    const portalReqId = docReq.additional_details?.portal_request_id;
+    await syncQueueTicket(req.db, portalReqId, "done");
     publishDataChange({ method: "POST", path: "/payments", source: "document-download" });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename=${docReq.document_type}_${docReq.document_number}.pdf`);
@@ -1772,7 +1823,36 @@ api.get("/portal/track/:trackingNumber/download", async (req, res, next) => {
 api.get("/portal-requests", requireUser, async (req, res, next) => {
   try {
     const requests = await req.db.collection("portal_requests").find(notDeleted(), { projection: { _id: 0 } }).sort(byCreatedDesc).limit(200).toArray();
-    res.json({ requests: requests.map(serialize), total: requests.length });
+
+    // Enrich each portal request with live queue ticket status so the PWA UI
+    // can show what the kiosk monitor is currently displaying.
+    const ticketIds = requests.map(r => r.queue_ticket_id).filter(Boolean);
+    const trackingNumbers = requests.filter(r => !r.queue_ticket_id && r.tracking_number).map(r => r.tracking_number);
+    let ticketMap = {};
+    if (ticketIds.length > 0 || trackingNumbers.length > 0) {
+      const orClauses = [];
+      if (ticketIds.length) orClauses.push({ id: { $in: ticketIds } });
+      if (trackingNumbers.length) orClauses.push({ tracking_number: { $in: trackingNumbers } });
+      const tickets = await req.db.collection("queue_tickets").find(
+        { $or: orClauses },
+        { projection: { _id: 0, id: 1, tracking_number: 1, status: 1, code: 1 } }
+      ).toArray();
+      for (const t of tickets) {
+        ticketMap[t.id] = t;
+        ticketMap[t.tracking_number] = t;
+      }
+    }
+
+    const enriched = requests.map(r => {
+      const ticket = ticketMap[r.queue_ticket_id] || ticketMap[r.tracking_number] || null;
+      return serialize({
+        ...r,
+        queue_status: ticket?.status || null,
+        queue_code: r.queue_code || ticket?.code || null,
+      });
+    });
+
+    res.json({ requests: enriched, total: enriched.length });
   } catch (error) { next(error); }
 });
 
@@ -1796,6 +1876,9 @@ api.put("/portal-requests/:reqId/process", requireUser, async (req, res, next) =
         }
       }
     );
+
+    // Sync kiosk queue: admin clicked Proceed → ticket moves to "Now Serving"
+    await syncQueueTicket(req.db, req.params.reqId, "now_serving");
 
     res.json({
       message: "Request marked processed; waiting for admin approval",
@@ -1870,6 +1953,9 @@ api.put("/portal-requests/:reqId/link-document", requireUser, async (req, res, n
         }
       }
     );
+
+    // Sync kiosk queue: document linked → ticket moves to "Processing"
+    await syncQueueTicket(req.db, req.params.reqId, "processing");
 
     res.json({
       message: "Document linked",

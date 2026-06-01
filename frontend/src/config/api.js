@@ -187,6 +187,7 @@ export const API_CONFIG = {
     portalRequest: '/portal/document-request',
     trackRequest: (tn) => `/portal/track/${tn}`,
     trackDownload: (tn) => `/portal/track/${tn}/download`,
+    nowServing: '/portal-requests/now-serving',
     portalRequests: '/portal-requests',
     processPortalRequest: (id) => `/portal-requests/${id}/process`,
     linkPortalRequestToDocument: (id) => `/portal-requests/${id}/link-document`,
