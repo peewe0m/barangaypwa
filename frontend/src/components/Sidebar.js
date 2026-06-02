@@ -60,7 +60,7 @@ export const Sidebar = () => {
       <button
         data-testid="mobile-menu-toggle"
         onClick={() => setIsOpen(!isOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-md bg-primary text-white"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-md bg-primary text-white shadow-lg shadow-primary/25"
       >
         {isOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
@@ -86,7 +86,10 @@ export const Sidebar = () => {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="p-6 border-b border-white/10">
-            <h1 className="text-xl font-heading font-bold">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-white/[0.12] ring-1 ring-white/[0.15]">
+              <HomeIcon size={22} />
+            </div>
+            <h1 className="text-xl font-heading font-bold leading-tight">
               {SYSTEM_CONFIG.barangayInfo.name}
             </h1>
             <p className="text-xs text-white/70 mt-1">Management System</p>
@@ -104,12 +107,12 @@ export const Sidebar = () => {
                   data-testid={`sidebar-link-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                   onClick={() => setIsOpen(false)}
                   className={`
-                    flex items-center gap-3 px-6 py-3 transition-all duration-200
-                    hover:bg-white/10 hover:border-r-4 hover:border-white
-                    ${isActive ? 'bg-white/20 border-r-4 border-white font-semibold' : ''}
+                    mx-3 mb-1 flex items-center gap-3 rounded-md px-3.5 py-2.5 text-sm transition-all duration-200
+                    hover:bg-white/10 hover:text-white
+                    ${isActive ? 'bg-white/[0.18] text-white shadow-sm ring-1 ring-white/[0.12] font-semibold' : 'text-white/80'}
                   `}
                 >
-                  <Icon size={20} />
+                  <Icon size={18} />
                   <span>{item.label}</span>
                 </Link>
               );
@@ -118,7 +121,7 @@ export const Sidebar = () => {
 
           {/* User Info & Logout */}
           <div className="p-4 border-t border-white/10">
-            <div className="mb-3">
+            <div className="mb-3 rounded-md bg-white/[0.08] px-3 py-3 ring-1 ring-white/10">
               <p className="text-sm font-semibold" data-testid="sidebar-user-name">
                 {user?.full_name}
               </p>
